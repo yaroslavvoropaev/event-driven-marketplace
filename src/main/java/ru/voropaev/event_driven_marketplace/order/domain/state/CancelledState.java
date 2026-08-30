@@ -1,9 +1,6 @@
 package ru.voropaev.event_driven_marketplace.order.domain.state;
 
 import org.springframework.stereotype.Component;
-import ru.voropaev.event_driven_marketplace.order.domain.InvalidOrderTransitionException;
-import ru.voropaev.event_driven_marketplace.order.domain.OrderState;
-import ru.voropaev.event_driven_marketplace.order.domain.OrderStatus;
 
 @Component
 public class CancelledState implements OrderState {

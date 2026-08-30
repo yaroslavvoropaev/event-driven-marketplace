@@ -1,8 +1,8 @@
 package ru.voropaev.event_driven_marketplace.order.state;
 
 import org.junit.jupiter.api.Test;
-import ru.voropaev.event_driven_marketplace.order.domain.OrderStateResolver;
-import ru.voropaev.event_driven_marketplace.order.domain.OrderStatus;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStateResolver;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 import ru.voropaev.event_driven_marketplace.order.domain.state.CancelledState;
 import ru.voropaev.event_driven_marketplace.order.domain.state.ConfirmedState;
 import ru.voropaev.event_driven_marketplace.order.domain.state.CreatedState;

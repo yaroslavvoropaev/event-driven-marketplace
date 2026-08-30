@@ -8,9 +8,9 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
-import ru.voropaev.event_driven_marketplace.order.api.CreateOrderRequest;
-import ru.voropaev.event_driven_marketplace.order.api.OrderItemRequest;
-import ru.voropaev.event_driven_marketplace.order.api.OrderResponse;
+import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
+import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
+import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
 

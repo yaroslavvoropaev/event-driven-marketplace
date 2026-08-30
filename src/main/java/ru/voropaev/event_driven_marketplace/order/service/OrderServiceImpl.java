@@ -3,9 +3,11 @@ package ru.voropaev.event_driven_marketplace.order.service;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import ru.voropaev.event_driven_marketplace.order.api.CreateOrderRequest;
-import ru.voropaev.event_driven_marketplace.order.api.OrderResponse;
+import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
+import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.domain.*;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStateResolver;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 import ru.voropaev.event_driven_marketplace.order.repository.OrderRepository;
 

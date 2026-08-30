@@ -1,7 +1,7 @@
 package ru.voropaev.event_driven_marketplace.order.service;
 
-import ru.voropaev.event_driven_marketplace.order.api.CreateOrderRequest;
-import ru.voropaev.event_driven_marketplace.order.api.OrderResponse;
+import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
+import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 
 import java.util.UUID;
 

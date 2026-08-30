@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
+import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.service.OrderService;
 
 import java.net.URI;

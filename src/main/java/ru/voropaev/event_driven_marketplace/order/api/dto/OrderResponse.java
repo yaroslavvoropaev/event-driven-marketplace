@@ -1,6 +1,6 @@
-package ru.voropaev.event_driven_marketplace.order.api;
+package ru.voropaev.event_driven_marketplace.order.api.dto;
 
-import ru.voropaev.event_driven_marketplace.order.domain.OrderStatus;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 
 import java.math.BigDecimal;
 import java.util.UUID;

@@ -1,8 +1,8 @@
 package ru.voropaev.event_driven_marketplace.order.state;
 
 import org.junit.jupiter.api.Test;
-import ru.voropaev.event_driven_marketplace.order.domain.InvalidOrderTransitionException;
-import ru.voropaev.event_driven_marketplace.order.domain.OrderStatus;
+import ru.voropaev.event_driven_marketplace.order.domain.state.InvalidOrderTransitionException;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 import ru.voropaev.event_driven_marketplace.order.domain.state.ConfirmedState;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;

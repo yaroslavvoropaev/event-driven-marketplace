@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -11,7 +12,7 @@ import java.util.*;
 
 @Entity
 @Getter
-@Table(name = "orders")
+@Table(name = "orders", schema = "order_service")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order {
     @Id

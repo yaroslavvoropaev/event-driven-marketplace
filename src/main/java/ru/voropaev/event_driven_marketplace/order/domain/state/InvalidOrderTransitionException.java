@@ -1,4 +1,4 @@
-package ru.voropaev.event_driven_marketplace.order.domain;
+package ru.voropaev.event_driven_marketplace.order.domain.state;
 
 public class InvalidOrderTransitionException extends RuntimeException {
     public InvalidOrderTransitionException(OrderStatus from, String attemptedAction) {

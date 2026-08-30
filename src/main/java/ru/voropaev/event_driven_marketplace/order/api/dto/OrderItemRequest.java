@@ -1,4 +1,4 @@
-package ru.voropaev.event_driven_marketplace.order.api;
+package ru.voropaev.event_driven_marketplace.order.api.dto;
 
 import java.math.BigDecimal;
 import java.util.UUID;
