@@ -1,19 +1,19 @@
-package ru.voropaev.event_driven_marketplace.order;
+package ru.voropaev.event_driven_marketplace.order.state;
 
 import org.junit.jupiter.api.Test;
 import ru.voropaev.event_driven_marketplace.order.domain.InvalidOrderTransitionException;
 import ru.voropaev.event_driven_marketplace.order.domain.OrderStatus;
-import ru.voropaev.event_driven_marketplace.order.domain.state.ConfirmedState;
+import ru.voropaev.event_driven_marketplace.order.domain.state.CancelledState;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class ConfirmedStateTest {
-    private final ConfirmedState state = new ConfirmedState();
+public class CancelledStateTest {
+    private final CancelledState state = new CancelledState();
 
     @Test
-    void codeIsConfirmed() {
-        assertEquals(OrderStatus.CONFIRMED, state.code());
+    void codeIsCancelled() {
+        assertEquals(OrderStatus.CANCELLED, state.code());
     }
 
     @Test

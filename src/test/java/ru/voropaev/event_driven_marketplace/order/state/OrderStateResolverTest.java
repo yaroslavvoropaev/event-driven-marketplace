@@ -1,4 +1,4 @@
-package ru.voropaev.event_driven_marketplace.order;
+package ru.voropaev.event_driven_marketplace.order.state;
 
 import org.junit.jupiter.api.Test;
 import ru.voropaev.event_driven_marketplace.order.domain.OrderStateResolver;
