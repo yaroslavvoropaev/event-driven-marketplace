@@ -14,15 +14,15 @@ import java.util.UUID;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderItem {
     @Id
-    UUID id;
+    private UUID id;
 
     @ManyToOne
     @JoinColumn(name = "order_id")
-    Order order;
+    private Order order;
 
-    UUID productId;
-    int quantity;
-    BigDecimal unitPrice;
+    private UUID productId;
+    private int quantity;
+    private BigDecimal unitPrice;
 
     public OrderItem(UUID productId, int quantity, BigDecimal unitPrice) {
         this.id = UUID.randomUUID();
@@ -31,11 +31,11 @@ public class OrderItem {
         this.unitPrice = unitPrice;
     }
 
-    BigDecimal subtotal() {
+    public BigDecimal subtotal() {
         return unitPrice.multiply(BigDecimal.valueOf(quantity));
     }
 
-    void assignTo(Order order) {
+    public void assignTo(Order order) {
         this.order = order;
     }
 }

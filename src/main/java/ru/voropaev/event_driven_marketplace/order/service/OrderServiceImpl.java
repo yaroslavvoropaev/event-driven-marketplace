@@ -84,7 +84,6 @@ public class OrderServiceImpl implements OrderService {
                 order.getOrderStatus(),
                 order.getTotalAmount()
         );
-
     }
 
 }
