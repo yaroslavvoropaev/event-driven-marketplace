@@ -8,6 +8,7 @@ import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import ru.voropaev.event_driven_marketplace.inventory.domain.exception.InsufficientStockException;
 
 import java.util.UUID;
 

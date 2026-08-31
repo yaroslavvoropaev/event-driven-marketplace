@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import ru.voropaev.event_driven_marketplace.inventory.domain.exception.IllegalReservationTransitionException;
 
 import java.time.Instant;
 import java.util.UUID;
