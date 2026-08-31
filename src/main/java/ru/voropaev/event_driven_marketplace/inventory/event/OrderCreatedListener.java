@@ -1,6 +1,7 @@
 package ru.voropaev.event_driven_marketplace.inventory.event;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -12,6 +13,8 @@ import java.time.Instant;
 
 @Component
 public class OrderCreatedListener {
+    private static final int MAX_ATTEMPTS = 3;
+
     private final InventoryService inventoryService;
     private final ApplicationEventPublisher applicationEventPublisher;
 
@@ -22,19 +25,34 @@ public class OrderCreatedListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void on(OrderCreated event) {
-        try {
-            inventoryService.reserveForOrder(event);
-            applicationEventPublisher.publishEvent(new InventoryReserved(
-                    event.orderId(),
-                    Instant.now()
-            ));
-        } catch (ReservationFailedException exception) {
-            applicationEventPublisher.publishEvent(new InventoryReservationFailed(
-                    event.orderId(),
-                    exception.getMessage(),
-                    Instant.now()
-            ));
-        }
+        int attempts = 0;
 
+        while (true) {
+            attempts++;
+            try {
+                inventoryService.reserveForOrder(event);
+                applicationEventPublisher.publishEvent(new InventoryReserved(
+                        event.orderId(),
+                        Instant.now()
+                ));
+                return;
+            } catch (ObjectOptimisticLockingFailureException exception) {
+                if (attempts >= MAX_ATTEMPTS) {
+                    applicationEventPublisher.publishEvent(new InventoryReservationFailed(
+                            event.orderId(),
+                            "Concurrent modification while reserving stock, retries exhausted",
+                            Instant.now()
+                    ));
+                    return;
+                }
+            } catch (ReservationFailedException exception) {
+                applicationEventPublisher.publishEvent(new InventoryReservationFailed(
+                        event.orderId(),
+                        exception.getMessage(),
+                        Instant.now()
+                ));
+                return;
+            }
+        }
     }
 }

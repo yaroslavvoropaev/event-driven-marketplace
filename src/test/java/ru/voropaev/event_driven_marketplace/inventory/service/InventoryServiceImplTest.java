@@ -44,7 +44,7 @@ class InventoryServiceImplTest {
     void reservesStockAndSavesReservation_whenEnoughQuantity() {
         UUID orderId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        Stock stock = new Stock(productId, 10, 0);
+        Stock stock = new Stock(productId, BigDecimal.TEN, 10, 0);
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
 
         OrderCreated event = new OrderCreated(
@@ -71,7 +71,7 @@ class InventoryServiceImplTest {
     @Test
     void throwsInsufficientStockException_whenNotEnoughQuantity() {
         UUID productId = UUID.randomUUID();
-        Stock stock = new Stock(productId, 1, 0);
+        Stock stock = new Stock(productId, BigDecimal.TEN, 1, 0);
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
 
         OrderCreated event = new OrderCreated(
@@ -103,8 +103,8 @@ class InventoryServiceImplTest {
     void stopsAtFirstFailingItem_whenLaterItemHasNotEnoughStock() {
         UUID productA = UUID.randomUUID();
         UUID productB = UUID.randomUUID();
-        Stock stockA = new Stock(productA, 5, 0);
-        Stock stockB = new Stock(productB, 1, 0);
+        Stock stockA = new Stock(productA, BigDecimal.TEN, 5, 0);
+        Stock stockB = new Stock(productB, BigDecimal.TEN, 1, 0);
         when(stockRepository.findByProductId(productA)).thenReturn(Optional.of(stockA));
         when(stockRepository.findByProductId(productB)).thenReturn(Optional.of(stockB));
 

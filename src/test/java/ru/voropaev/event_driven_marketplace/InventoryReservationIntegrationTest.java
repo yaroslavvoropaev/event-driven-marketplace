@@ -16,6 +16,7 @@ import ru.voropaev.event_driven_marketplace.inventory.repository.StockRepository
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 import ru.voropaev.event_driven_marketplace.order.service.OrderService;
 
 import java.math.BigDecimal;
@@ -25,11 +26,6 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-// Тест намеренно НЕ @Transactional на методах: @TransactionalEventListener(AFTER_COMMIT)
-// у OrderCreatedListener срабатывает только при реальном коммите транзакции. Если бы тест
-// был @Transactional (как OrderControllerIntegrationTest), Spring откатывал бы транзакцию
-// в конце каждого теста, коммита никогда бы не было — и слушатель inventory ни разу не сработал
-// бы, хотя весь остальной тест выглядел бы так, будто всё в порядке.
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @RecordApplicationEvents
@@ -45,11 +41,11 @@ class InventoryReservationIntegrationTest {
     @Test
     void reservesStockAndPublishesInventoryReserved_whenEnoughStock(ApplicationEvents events) {
         UUID productId = UUID.randomUUID();
-        stockRepository.save(new Stock(productId, 10, 0));
+        stockRepository.save(new Stock(productId, BigDecimal.TEN, 10, 0));
 
         CreateOrderRequest request = new CreateOrderRequest(
                 "customer-1",
-                List.of(new OrderItemRequest(productId, 3, BigDecimal.TEN))
+                List.of(new OrderItemRequest(productId, 3))
         );
 
         OrderResponse response = orderService.createOrder(request);
@@ -67,16 +63,18 @@ class InventoryReservationIntegrationTest {
         boolean publishedInventoryReserved = events.stream(InventoryReserved.class)
                 .anyMatch(e -> e.orderId().equals(response.id()));
         assertTrue(publishedInventoryReserved);
+
+        assertEquals(OrderStatus.PENDING, orderService.getOrder(response.id()).orderStatus());
     }
 
     @Test
     void rollsBackAndPublishesInventoryReservationFailed_whenNotEnoughStock(ApplicationEvents events) {
         UUID productId = UUID.randomUUID();
-        stockRepository.save(new Stock(productId, 1, 0));
+        stockRepository.save(new Stock(productId, BigDecimal.TEN, 1, 0));
 
         CreateOrderRequest request = new CreateOrderRequest(
                 "customer-1",
-                List.of(new OrderItemRequest(productId, 3, BigDecimal.TEN))
+                List.of(new OrderItemRequest(productId, 3))
         );
 
         OrderResponse response = orderService.createOrder(request);
@@ -93,5 +91,7 @@ class InventoryReservationIntegrationTest {
         boolean publishedInventoryReservationFailed = events.stream(InventoryReservationFailed.class)
                 .anyMatch(e -> e.orderId().equals(response.id()));
         assertTrue(publishedInventoryReservationFailed);
+
+        assertEquals(OrderStatus.CANCELLED, orderService.getOrder(response.id()).orderStatus());
     }
 }

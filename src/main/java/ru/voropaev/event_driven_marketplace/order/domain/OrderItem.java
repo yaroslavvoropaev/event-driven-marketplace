@@ -22,6 +22,7 @@ public class OrderItem {
 
     private UUID productId;
     private int quantity;
+    @Column(precision = 19, scale = 2)
     private BigDecimal unitPrice;
 
     public OrderItem(UUID productId, int quantity, BigDecimal unitPrice) {

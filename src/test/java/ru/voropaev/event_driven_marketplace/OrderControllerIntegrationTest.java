@@ -14,7 +14,6 @@ import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 public class OrderControllerIntegrationTest {
+    private static final UUID SEEDED_PRODUCT_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -38,8 +39,7 @@ public class OrderControllerIntegrationTest {
     @Test
     @Transactional
     public void createOrderSuccess() throws Exception {
-
-        OrderItemRequest itemRequest = new OrderItemRequest(UUID.randomUUID(), 2, BigDecimal.valueOf(100));
+        OrderItemRequest itemRequest = new OrderItemRequest(SEEDED_PRODUCT_ID, 2);
         CreateOrderRequest request = new CreateOrderRequest("customer-1", List.of(itemRequest));
         String requestJson = objectMapper.writeValueAsString(request);
 
@@ -50,7 +50,7 @@ public class OrderControllerIntegrationTest {
                 .andExpect(header().exists("Location"))
                 .andExpect(jsonPath("$.customerId").value("customer-1"))
                 .andExpect(jsonPath("$.orderStatus").value("CREATED"))
-                .andExpect(jsonPath("$.totalAmount").value("200"));
+                .andExpect(jsonPath("$.totalAmount").value("200.0"));
     }
 
     @Test
@@ -118,7 +118,7 @@ public class OrderControllerIntegrationTest {
     }
 
     private UUID createOrderAndGetId() throws Exception {
-        OrderItemRequest itemRequest = new OrderItemRequest(UUID.randomUUID(), 2, BigDecimal.valueOf(100));
+        OrderItemRequest itemRequest = new OrderItemRequest(SEEDED_PRODUCT_ID, 2);
         CreateOrderRequest request = new CreateOrderRequest("customer-1", List.of(itemRequest));
         String requestJson = objectMapper.writeValueAsString(request);
 

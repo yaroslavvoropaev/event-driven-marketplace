@@ -2,7 +2,9 @@ package ru.voropaev.event_driven_marketplace.order.service;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.domain.*;
@@ -20,18 +22,20 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderStateResolver orderStateResolver;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final InventoryService inventoryService;
 
-    public OrderServiceImpl(OrderRepository orderRepository, OrderStateResolver orderStateResolver, ApplicationEventPublisher applicationEventPublisher) {
+    public OrderServiceImpl(OrderRepository orderRepository, OrderStateResolver orderStateResolver, ApplicationEventPublisher applicationEventPublisher, InventoryService inventoryService) {
         this.orderRepository = orderRepository;
         this.orderStateResolver = orderStateResolver;
         this.applicationEventPublisher = applicationEventPublisher;
+        this.inventoryService = inventoryService;
     }
 
     @Override
     @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
         List<OrderItem> orderItems = request.items().stream()
-                .map(item -> new OrderItem(item.productId(), item.quantity(), item.unitPrice()))
+                .map(item -> new OrderItem(item.productId(), item.quantity(), inventoryService.getPrice(item.productId())))
                 .toList();
 
         Order order = new Order(request.customerId());
@@ -57,6 +61,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public OrderResponse getOrder(UUID id) {
         Order order = getOrderById(id);
 
@@ -67,6 +72,25 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse cancelOrder(UUID id) {
+        return doCancel(id);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public OrderResponse cancelOrderDueToReservationFailure(UUID id) {
+        return doCancel(id);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public OrderResponse startProcessing(UUID id) {
+        Order order = getOrderById(id);
+        OrderStatus newStatus = orderStateResolver.resolve(order.getOrderStatus()).startProcessing();
+        order.updateStatus(newStatus);
+        return toResponse(order);
+    }
+
+    private OrderResponse doCancel(UUID id) {
         Order order = getOrderById(id);
         OrderStatus newStatus = orderStateResolver.resolve(order.getOrderStatus()).cancel();
         order.updateStatus(newStatus);

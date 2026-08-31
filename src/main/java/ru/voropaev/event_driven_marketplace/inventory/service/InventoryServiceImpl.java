@@ -10,6 +10,9 @@ import ru.voropaev.event_driven_marketplace.inventory.repository.ReservationRepo
 import ru.voropaev.event_driven_marketplace.inventory.repository.StockRepository;
 import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
 @Service
 public class InventoryServiceImpl implements InventoryService {
     private final StockRepository stockRepository;
@@ -31,5 +34,11 @@ public class InventoryServiceImpl implements InventoryService {
             Reservation reservation = Reservation.reserved(event.orderId(), item.productId(), item.quantity());
             reservationRepository.save(reservation);
         }
+    }
+
+    @Override
+    public BigDecimal getPrice(UUID productId) {
+        return stockRepository.findByProductId(productId)
+                .orElseThrow(() -> new StockNotFoundException(productId)).getPrice();
     }
 }

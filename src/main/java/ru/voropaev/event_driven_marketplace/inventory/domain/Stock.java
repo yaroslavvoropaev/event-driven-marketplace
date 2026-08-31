@@ -1,6 +1,7 @@
 package ru.voropaev.event_driven_marketplace.inventory.domain;
 
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -10,6 +11,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import ru.voropaev.event_driven_marketplace.inventory.domain.exception.InsufficientStockException;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Entity
@@ -20,14 +22,17 @@ public class Stock {
     @Id
     private UUID id;
     private UUID productId;
+    @Column(precision = 19, scale = 2)
+    private BigDecimal price;
     private int availableQuantity;
     private int reservedQuantity;
     @Version
     private Long version;
 
-    public Stock(UUID productId, int availableQuantity, int reservedQuantity) {
+    public Stock(UUID productId, BigDecimal price, int availableQuantity, int reservedQuantity) {
         this.id = UUID.randomUUID();
         this.productId = productId;
+        this.price = price;
         this.availableQuantity = availableQuantity;
         this.reservedQuantity = reservedQuantity;
     }

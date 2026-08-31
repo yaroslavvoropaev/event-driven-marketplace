@@ -7,6 +7,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
@@ -40,6 +41,8 @@ public class OrderServiceImplTest {
     private ApplicationEventPublisher applicationEventPublisher;
     @Mock
     private OrderState orderState;
+    @Mock
+    private InventoryService inventoryService;
 
     @InjectMocks
     OrderServiceImpl orderService;
@@ -47,8 +50,9 @@ public class OrderServiceImplTest {
     @Test
     public void saveOrderAndPublishEvent() {
         String customerId = "customer-1";
-        OrderItemRequest itemRequest = new OrderItemRequest(UUID.randomUUID(),2, BigDecimal.valueOf(100));
+        OrderItemRequest itemRequest = new OrderItemRequest(UUID.randomUUID(), 2);
         CreateOrderRequest orderRequest = new CreateOrderRequest(customerId, List.of(itemRequest));
+        when(inventoryService.getPrice(any(UUID.class))).thenReturn(BigDecimal.valueOf(100));
 
         OrderResponse response = orderService.createOrder(orderRequest);
 
