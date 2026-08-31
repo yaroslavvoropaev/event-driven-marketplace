@@ -28,6 +28,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
         List<OrderItem> orderItems = request.items().stream()
                 .map(item -> new OrderItem(item.productId(), item.quantity(), item.unitPrice()))
