@@ -1,6 +1,7 @@
 package ru.voropaev.event_driven_marketplace.inventory.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Reservation;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Stock;
@@ -20,7 +21,7 @@ public class InventoryServiceImpl implements InventoryService {
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reserveForOrder(OrderCreated event) {
         for (OrderCreated.OrderItemPayload item : event.items()) {
             Stock stock = stockRepository.findByProductId(item.productId())
