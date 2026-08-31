@@ -1,16 +1,16 @@
-CREATE TABLE orders (
-    id            UUID PRIMARY KEY,
-    customer_id   VARCHAR(255)   NOT NULL,
-    order_status  VARCHAR(20)    NOT NULL,
-    created_at    TIMESTAMPTZ    NOT NULL
+create table orders (
+    id            uuid                     primary key,
+    customer_id   varchar(255)             not null,
+    order_status  varchar(20)              not null,
+    created_at    timestamp with time zone not null
 );
 
-CREATE TABLE order_item (
-    id           UUID PRIMARY KEY,
-    order_id     UUID           NOT NULL REFERENCES orders (id),
-    product_id   UUID           NOT NULL,
-    quantity     INTEGER        NOT NULL,
-    unit_price   NUMERIC(19, 2) NOT NULL
+create table order_item (
+    id           uuid           primary key,
+    order_id     uuid           not null references orders (id),
+    product_id   uuid           not null,
+    quantity     integer        not null,
+    unit_price   numeric(19, 2) not null
 );
 
-CREATE INDEX idx_order_item_order_id ON order_item (order_id);
+create index idx_order_item_order_id on order_item (order_id);
