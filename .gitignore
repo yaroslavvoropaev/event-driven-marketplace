@@ -1,3 +1,5 @@
+src/main/resources/certs/app.key
+src/main/resources/certs/app-pkcs8.key
 HELP.md
 .gradle
 build/
