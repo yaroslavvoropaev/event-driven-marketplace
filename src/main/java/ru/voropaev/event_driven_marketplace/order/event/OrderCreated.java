@@ -7,7 +7,7 @@ import java.util.UUID;
 
 public record OrderCreated(
         UUID orderId,
-        String customerId,
+        UUID customerId,
         BigDecimal totalAmount,
         List<OrderItemPayload> items,
         Instant occurredAt

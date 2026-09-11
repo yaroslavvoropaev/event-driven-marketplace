@@ -9,6 +9,7 @@ import ru.voropaev.event_driven_marketplace.inventory.event.InventoryReservation
 import ru.voropaev.event_driven_marketplace.inventory.event.InventoryReserved;
 import ru.voropaev.event_driven_marketplace.order.service.OrderService;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -27,7 +28,7 @@ class InventoryReservationListenerTest {
     void startsProcessing_whenInventoryReserved() {
         UUID orderId = UUID.randomUUID();
 
-        listener.on(new InventoryReserved(orderId, Instant.now()));
+        listener.on(new InventoryReserved(orderId, UUID.randomUUID(), BigDecimal.valueOf(100), Instant.now()));
 
         verify(orderService).startProcessing(orderId);
     }

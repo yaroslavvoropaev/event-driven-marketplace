@@ -49,12 +49,12 @@ public class OrderServiceImplTest {
 
     @Test
     public void saveOrderAndPublishEvent() {
-        String customerId = "customer-1";
+        UUID customerId = UUID.randomUUID();
         OrderItemRequest itemRequest = new OrderItemRequest(UUID.randomUUID(), 2);
-        CreateOrderRequest orderRequest = new CreateOrderRequest(customerId, List.of(itemRequest));
+        CreateOrderRequest orderRequest = new CreateOrderRequest(List.of(itemRequest));
         when(inventoryService.getPrice(any(UUID.class))).thenReturn(BigDecimal.valueOf(100));
 
-        OrderResponse response = orderService.createOrder(orderRequest);
+        OrderResponse response = orderService.createOrder(customerId, orderRequest);
 
         assertEquals(customerId, response.customerId());
         assertEquals(OrderStatus.CREATED, response.orderStatus());
@@ -77,13 +77,13 @@ public class OrderServiceImplTest {
 
     @Test
     public void returnsResponseWhenExists() {
-        Order order = new Order("customer-1");
+        Order order = new Order(UUID.randomUUID());
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
 
         OrderResponse response = orderService.getOrder(order.getId());
 
         assertEquals(order.getId(), response.id());
-        assertEquals("customer-1", response.customerId());
+        assertEquals(order.getCustomerId(), response.customerId());
         assertEquals(OrderStatus.CREATED, response.orderStatus());
     }
 
@@ -97,7 +97,7 @@ public class OrderServiceImplTest {
 
     @Test
     public void updatesStatusWhenTransitionLegal() {
-        Order order = new Order("customer-1");
+        Order order = new Order(UUID.randomUUID());
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
         when(orderStateResolver.resolve(OrderStatus.CREATED)).thenReturn(orderState);
         when(orderState.cancel()).thenReturn(OrderStatus.CANCELLED);
@@ -109,7 +109,7 @@ public class OrderServiceImplTest {
 
     @Test
     public void _propagatesExceptionWhenTransitionIllegal() {
-        Order order = new Order("customer-1");
+        Order order = new Order(UUID.randomUUID());
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
         when(orderStateResolver.resolve(OrderStatus.CREATED)).thenReturn(orderState);
         when(orderState.cancel())

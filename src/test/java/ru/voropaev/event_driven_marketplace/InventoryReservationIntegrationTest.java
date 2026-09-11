@@ -41,14 +41,14 @@ class InventoryReservationIntegrationTest {
     @Test
     void reservesStockAndPublishesInventoryReserved_whenEnoughStock(ApplicationEvents events) {
         UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
         stockRepository.save(new Stock(productId, BigDecimal.TEN, 10, 0));
 
         CreateOrderRequest request = new CreateOrderRequest(
-                "customer-1",
                 List.of(new OrderItemRequest(productId, 3))
         );
 
-        OrderResponse response = orderService.createOrder(request);
+        OrderResponse response = orderService.createOrder(customerId, request);
 
         Stock updatedStock = stockRepository.findByProductId(productId).orElseThrow();
         assertEquals(7, updatedStock.getAvailableQuantity());
@@ -60,9 +60,12 @@ class InventoryReservationIntegrationTest {
         assertEquals(1, reservationsForOrder.size());
         assertEquals(ReservationStatus.RESERVED, reservationsForOrder.getFirst().getReservationStatus());
 
-        boolean publishedInventoryReserved = events.stream(InventoryReserved.class)
-                .anyMatch(e -> e.orderId().equals(response.id()));
-        assertTrue(publishedInventoryReserved);
+        InventoryReserved publishedInventoryReserved = events.stream(InventoryReserved.class)
+                .filter(e -> e.orderId().equals(response.id()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(customerId, publishedInventoryReserved.customerId());
+        assertEquals(0, publishedInventoryReserved.totalAmount().compareTo(response.totalAmount()));
 
         assertEquals(OrderStatus.PENDING, orderService.getOrder(response.id()).orderStatus());
     }
@@ -70,14 +73,14 @@ class InventoryReservationIntegrationTest {
     @Test
     void rollsBackAndPublishesInventoryReservationFailed_whenNotEnoughStock(ApplicationEvents events) {
         UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
         stockRepository.save(new Stock(productId, BigDecimal.TEN, 1, 0));
 
         CreateOrderRequest request = new CreateOrderRequest(
-                "customer-1",
                 List.of(new OrderItemRequest(productId, 3))
         );
 
-        OrderResponse response = orderService.createOrder(request);
+        OrderResponse response = orderService.createOrder(customerId, request);
 
         Stock unchangedStock = stockRepository.findByProductId(productId).orElseThrow();
         assertEquals(1, unchangedStock.getAvailableQuantity());

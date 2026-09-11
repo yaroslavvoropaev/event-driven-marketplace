@@ -34,7 +34,7 @@ class OrderCreatedListenerTest {
     @Test
     void publishesInventoryReserved_whenReservationSucceeds() {
         OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), "customer-1", BigDecimal.valueOf(100),
+                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(100),
                 List.of(new OrderCreated.OrderItemPayload(UUID.randomUUID(), 1)),
                 Instant.now()
         );
@@ -43,13 +43,17 @@ class OrderCreatedListenerTest {
 
         ArgumentCaptor<InventoryReserved> captor = ArgumentCaptor.forClass(InventoryReserved.class);
         verify(applicationEventPublisher).publishEvent(captor.capture());
-        assertEquals(event.orderId(), captor.getValue().orderId());
+
+        InventoryReserved published = captor.getValue();
+        assertEquals(event.orderId(), published.orderId());
+        assertEquals(event.customerId(), published.customerId());
+        assertEquals(event.totalAmount(), published.totalAmount());
     }
 
     @Test
     void publishesInventoryReservationFailed_whenReservationThrows() {
         OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), "customer-1", BigDecimal.valueOf(100),
+                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(100),
                 List.of(new OrderCreated.OrderItemPayload(UUID.randomUUID(), 5)),
                 Instant.now()
         );

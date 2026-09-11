@@ -33,12 +33,12 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public OrderResponse createOrder(CreateOrderRequest request) {
+    public OrderResponse createOrder(UUID customerId, CreateOrderRequest request) {
         List<OrderItem> orderItems = request.items().stream()
                 .map(item -> new OrderItem(item.productId(), item.quantity(), inventoryService.getPrice(item.productId())))
                 .toList();
 
-        Order order = new Order(request.customerId());
+        Order order = new Order(customerId);
 
         for (OrderItem orderItem : orderItems) {
             order.addItem(orderItem);
@@ -51,7 +51,7 @@ public class OrderServiceImpl implements OrderService {
 
         applicationEventPublisher.publishEvent(new OrderCreated(
                 order.getId(),
-                order.getCustomerId(),
+                customerId,
                 order.getTotalAmount(),
                 itemsForEvent,
                 order.getCreatedAt())

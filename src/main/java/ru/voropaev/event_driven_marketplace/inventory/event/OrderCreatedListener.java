@@ -33,6 +33,8 @@ public class OrderCreatedListener {
                 inventoryService.reserveForOrder(event);
                 applicationEventPublisher.publishEvent(new InventoryReserved(
                         event.orderId(),
+                        event.customerId(),
+                        event.totalAmount(),
                         Instant.now()
                 ));
                 return;

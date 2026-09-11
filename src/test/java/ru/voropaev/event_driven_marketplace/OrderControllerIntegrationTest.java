@@ -22,6 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -39,16 +40,18 @@ public class OrderControllerIntegrationTest {
     @Test
     @Transactional
     public void createOrderSuccess() throws Exception {
+        UUID customerId = UUID.randomUUID();
         OrderItemRequest itemRequest = new OrderItemRequest(SEEDED_PRODUCT_ID, 2);
-        CreateOrderRequest request = new CreateOrderRequest("customer-1", List.of(itemRequest));
+        CreateOrderRequest request = new CreateOrderRequest(List.of(itemRequest));
         String requestJson = objectMapper.writeValueAsString(request);
 
         mockMvc.perform(post("/api/orders")
+                        .with(jwt().jwt(j -> j.subject(customerId.toString())))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("Location"))
-                .andExpect(jsonPath("$.customerId").value("customer-1"))
+                .andExpect(jsonPath("$.customerId").value(customerId.toString()))
                 .andExpect(jsonPath("$.orderStatus").value("CREATED"))
                 .andExpect(jsonPath("$.totalAmount").value("200.0"));
     }
@@ -56,10 +59,11 @@ public class OrderControllerIntegrationTest {
     @Test
     @Transactional
     public void createOrder_returnsBadRequest_whenItemsEmpty() throws Exception {
-        CreateOrderRequest request = new CreateOrderRequest("customer-1", List.of());
+        CreateOrderRequest request = new CreateOrderRequest(List.of());
         String requestJson = objectMapper.writeValueAsString(request);
 
         mockMvc.perform(post("/api/orders")
+                        .with(jwt())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
                 .andExpect(status().isBadRequest());
@@ -68,12 +72,13 @@ public class OrderControllerIntegrationTest {
     @Test
     @Transactional
     public void getOrder_returnsOrder_whenExists() throws Exception {
-        UUID orderId = createOrderAndGetId();
+        UUID customerId = UUID.randomUUID();
+        UUID orderId = createOrderAndGetId(customerId);
 
-        mockMvc.perform(get("/api/orders/{id}", orderId))
+        mockMvc.perform(get("/api/orders/{id}", orderId).with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(orderId.toString()))
-                .andExpect(jsonPath("$.customerId").value("customer-1"))
+                .andExpect(jsonPath("$.customerId").value(customerId.toString()))
                 .andExpect(jsonPath("$.orderStatus").value("CREATED"));
     }
 
@@ -82,16 +87,16 @@ public class OrderControllerIntegrationTest {
     public void getOrder_returnsNotFound_whenMissing() throws Exception {
         UUID missingId = UUID.randomUUID();
 
-        mockMvc.perform(get("/api/orders/{id}", missingId))
+        mockMvc.perform(get("/api/orders/{id}", missingId).with(jwt()))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     @Transactional
     public void cancelOrder_cancelsOrder_whenExists() throws Exception {
-        UUID orderId = createOrderAndGetId();
+        UUID orderId = createOrderAndGetId(UUID.randomUUID());
 
-        mockMvc.perform(post("/api/orders/{id}/cancel", orderId))
+        mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.orderStatus").value("CANCELLED"));
     }
@@ -101,28 +106,29 @@ public class OrderControllerIntegrationTest {
     public void cancelOrder_returnsNotFound_whenMissing() throws Exception {
         UUID missingId = UUID.randomUUID();
 
-        mockMvc.perform(post("/api/orders/{id}/cancel", missingId))
+        mockMvc.perform(post("/api/orders/{id}/cancel", missingId).with(jwt()))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     @Transactional
     public void cancelOrder_returnsConflict_whenAlreadyCancelled() throws Exception {
-        UUID orderId = createOrderAndGetId();
+        UUID orderId = createOrderAndGetId(UUID.randomUUID());
 
-        mockMvc.perform(post("/api/orders/{id}/cancel", orderId))
+        mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(jwt()))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/orders/{id}/cancel", orderId))
+        mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(jwt()))
                 .andExpect(status().isConflict());
     }
 
-    private UUID createOrderAndGetId() throws Exception {
+    private UUID createOrderAndGetId(UUID customerId) throws Exception {
         OrderItemRequest itemRequest = new OrderItemRequest(SEEDED_PRODUCT_ID, 2);
-        CreateOrderRequest request = new CreateOrderRequest("customer-1", List.of(itemRequest));
+        CreateOrderRequest request = new CreateOrderRequest(List.of(itemRequest));
         String requestJson = objectMapper.writeValueAsString(request);
 
         MvcResult result = mockMvc.perform(post("/api/orders")
+                        .with(jwt().jwt(j -> j.subject(customerId.toString())))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
                 .andExpect(status().isCreated())

@@ -12,7 +12,7 @@ import java.util.UUID;
 
 @Entity
 @Getter
-@Table(name = "users")
+@Table(name = "users", schema = "auth")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User {
     @Id

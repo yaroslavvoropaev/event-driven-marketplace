@@ -48,7 +48,7 @@ class InventoryServiceImplTest {
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
 
         OrderCreated event = new OrderCreated(
-                orderId, "customer-1", BigDecimal.valueOf(300),
+                orderId, UUID.randomUUID(), BigDecimal.valueOf(300),
                 List.of(new OrderCreated.OrderItemPayload(productId, 3)),
                 Instant.now()
         );
@@ -75,7 +75,7 @@ class InventoryServiceImplTest {
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
 
         OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), "customer-1", BigDecimal.valueOf(300),
+                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(300),
                 List.of(new OrderCreated.OrderItemPayload(productId, 3)),
                 Instant.now()
         );
@@ -90,7 +90,7 @@ class InventoryServiceImplTest {
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.empty());
 
         OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), "customer-1", BigDecimal.valueOf(300),
+                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(300),
                 List.of(new OrderCreated.OrderItemPayload(productId, 1)),
                 Instant.now()
         );
@@ -109,7 +109,7 @@ class InventoryServiceImplTest {
         when(stockRepository.findByProductId(productB)).thenReturn(Optional.of(stockB));
 
         OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), "customer-1", BigDecimal.valueOf(300),
+                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(300),
                 List.of(
                         new OrderCreated.OrderItemPayload(productA, 2),
                         new OrderCreated.OrderItemPayload(productB, 5)

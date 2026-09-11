@@ -18,7 +18,7 @@ public class Order {
     @Id
     UUID id;
 
-    String customerId;
+    UUID customerId;
 
     @Enumerated(EnumType.STRING)
     OrderStatus orderStatus;
@@ -28,7 +28,7 @@ public class Order {
 
     Instant createdAt;
 
-    public Order(String customerId) {
+    public Order(UUID customerId) {
         this.id = UUID.randomUUID();
         this.customerId = customerId;
         this.orderStatus = OrderStatus.CREATED;

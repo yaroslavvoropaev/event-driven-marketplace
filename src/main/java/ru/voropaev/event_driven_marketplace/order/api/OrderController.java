@@ -3,12 +3,15 @@ package ru.voropaev.event_driven_marketplace.order.api;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.service.OrderService;
 
 import java.net.URI;
+import java.util.Objects;
 import java.util.UUID;
 
 @RestController
@@ -21,8 +24,11 @@ public class OrderController {
     }
 
     @PostMapping
-    ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
-        OrderResponse orderResponse = orderService.createOrder(request);
+    ResponseEntity<OrderResponse> createOrder(
+            @Valid @RequestBody CreateOrderRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID customerId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
+        OrderResponse orderResponse = orderService.createOrder(customerId, request);
 
         URI location = URI.create("/api/orders/" + orderResponse.id());
         return ResponseEntity.created(location).body(orderResponse);
