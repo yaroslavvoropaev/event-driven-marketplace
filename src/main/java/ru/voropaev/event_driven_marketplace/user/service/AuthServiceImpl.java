@@ -14,6 +14,7 @@ import ru.voropaev.event_driven_marketplace.user.domain.User;
 import ru.voropaev.event_driven_marketplace.user.domain.exception.InvalidCredentialsException;
 import ru.voropaev.event_driven_marketplace.user.repository.UserRepository;
 
+import java.time.Clock;
 import java.time.Instant;
 
 
@@ -22,12 +23,14 @@ public class AuthServiceImpl  implements AuthService{
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtEncoder jwtEncoder;
+    private final Clock clock;
     private static final long TOKEN_TTL_SECONDS = 3600;
 
-    public AuthServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtEncoder jwtEncoder) {
+    public AuthServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtEncoder jwtEncoder, Clock clock) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtEncoder = jwtEncoder;
+        this.clock = clock;
     }
 
     @Override
@@ -51,10 +54,11 @@ public class AuthServiceImpl  implements AuthService{
             throw new InvalidCredentialsException();
         }
 
+        Instant issuedAt = Instant.now(clock);
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(user.getId().toString())
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(TOKEN_TTL_SECONDS))
+                .issuedAt(issuedAt)
+                .expiresAt(issuedAt.plusSeconds(TOKEN_TTL_SECONDS))
                 .build();
 
         String token = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
