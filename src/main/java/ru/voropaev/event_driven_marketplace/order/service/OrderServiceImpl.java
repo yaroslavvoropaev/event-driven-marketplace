@@ -8,7 +8,6 @@ import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.domain.*;
-import ru.voropaev.event_driven_marketplace.order.domain.state.OrderState;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStateResolver;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;

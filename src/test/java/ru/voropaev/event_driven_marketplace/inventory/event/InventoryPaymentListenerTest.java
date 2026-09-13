@@ -1,12 +1,13 @@
 package ru.voropaev.event_driven_marketplace.inventory.event;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import ru.voropaev.event_driven_marketplace.common.retry.OptimisticLockRetrier;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Stock;
 import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.payment.event.PaymentCompleted;
@@ -30,8 +31,20 @@ class InventoryPaymentListenerTest {
     @Mock
     private InventoryService inventoryService;
 
-    @InjectMocks
     private InventoryPaymentListener listener;
+
+    /**
+     * Ретраер настоящий, а не мок: число попыток — часть наблюдаемого поведения
+     * листенера, а замоканный runWithRetry не вызвал бы лямбду вовсе.
+     * Нулевой backoff, чтобы тесты не спали.
+     */
+    @BeforeEach
+    void setUp() {
+        listener = new InventoryPaymentListener(
+                inventoryService,
+                new OptimisticLockRetrier(MAX_ATTEMPTS, 0)
+        );
+    }
 
     private final PaymentCompleted event = new PaymentCompleted(
             ORDER_ID,
