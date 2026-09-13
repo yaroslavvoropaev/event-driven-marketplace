@@ -69,7 +69,7 @@ public class InventoryServiceImpl implements InventoryService {
             Stock stock = stockRepository.findByProductId(reservation.getProductId())
                     .orElseThrow(() -> new StockNotFoundException(reservation.getProductId()));
 
-            stock.reserve(reservation.getQuantity());
+            stock.release(reservation.getQuantity());
             reservation.release();
         }
     }

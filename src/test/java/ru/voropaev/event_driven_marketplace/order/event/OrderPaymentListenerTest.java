@@ -7,6 +7,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.voropaev.event_driven_marketplace.order.service.OrderService;
 import ru.voropaev.event_driven_marketplace.payment.event.PaymentCompleted;
+import ru.voropaev.event_driven_marketplace.payment.event.PaymentFailed;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -39,6 +40,22 @@ class OrderPaymentListenerTest {
         listener.on(event);
 
         verify(orderService).confirmOrder(ORDER_ID);
+    }
+
+    @Test
+    void cancelsOrderWhenPaymentFailed() {
+        PaymentFailed event = new PaymentFailed(
+                ORDER_ID,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                new BigDecimal("199.13"),
+                "insufficient funds",
+                Instant.now()
+        );
+
+        listener.on(event);
+
+        verify(orderService).cancelOrderDueToPaymentFailure(ORDER_ID);
     }
 
 }

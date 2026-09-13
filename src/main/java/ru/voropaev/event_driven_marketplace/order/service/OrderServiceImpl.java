@@ -93,6 +93,12 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public OrderResponse cancelOrderDueToPaymentFailure(UUID id) {
+        return doCancel(id);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public OrderResponse startProcessing(UUID id) {
         Order order = getOrderById(id);
         OrderStatus newStatus = orderStateResolver.resolve(order.getOrderStatus()).startProcessing();

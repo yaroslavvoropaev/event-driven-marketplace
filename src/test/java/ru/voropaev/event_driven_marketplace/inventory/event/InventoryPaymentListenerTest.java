@@ -10,6 +10,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Stock;
 import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.payment.event.PaymentCompleted;
+import ru.voropaev.event_driven_marketplace.payment.event.PaymentFailed;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -38,6 +39,15 @@ class InventoryPaymentListenerTest {
             UUID.randomUUID(),
             new BigDecimal("199.00"),
             "fake-tx-1",
+            Instant.now()
+    );
+
+    private final PaymentFailed paymentFailed = new PaymentFailed(
+            ORDER_ID,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            new BigDecimal("199.13"),
+            "insufficient funds",
             Instant.now()
     );
 
@@ -76,6 +86,39 @@ class InventoryPaymentListenerTest {
         listener.on(event);
 
         verify(inventoryService, times(MAX_ATTEMPTS)).confirmReservations(ORDER_ID);
+    }
+
+    @Test
+    void releasesReservationsOfTheFailedOrder() {
+        listener.on(paymentFailed);
+
+        verify(inventoryService).releaseReservations(ORDER_ID);
+    }
+
+    @Test
+    void retriesReleaseAfterVersionConflict_andSucceedsOnSecondAttempt() {
+        doThrow(versionConflict())
+                .doNothing()
+                .when(inventoryService).releaseReservations(ORDER_ID);
+
+        listener.on(paymentFailed);
+
+        verify(inventoryService, times(2)).releaseReservations(ORDER_ID);
+    }
+
+    /**
+     * Компенсация не удалась. Выхода нет: платёж провален, заказ отменён, а товар
+     * остаётся висеть в резерве и никому не доступен. Листенер обязан сдаться и
+     * оставить след в логе — чинится это только вручную или будущим Outbox'ом.
+     */
+    @Test
+    @Timeout(5)
+    void givesUpRelease_afterMaxAttempts() {
+        doThrow(versionConflict()).when(inventoryService).releaseReservations(ORDER_ID);
+
+        listener.on(paymentFailed);
+
+        verify(inventoryService, times(MAX_ATTEMPTS)).releaseReservations(ORDER_ID);
     }
 
     @Test

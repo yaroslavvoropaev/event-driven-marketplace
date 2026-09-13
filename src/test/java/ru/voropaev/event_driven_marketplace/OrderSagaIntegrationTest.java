@@ -21,6 +21,7 @@ import ru.voropaev.event_driven_marketplace.order.service.OrderService;
 import ru.voropaev.event_driven_marketplace.payment.domain.Payment;
 import ru.voropaev.event_driven_marketplace.payment.domain.state.PaymentStatus;
 import ru.voropaev.event_driven_marketplace.payment.event.PaymentCompleted;
+import ru.voropaev.event_driven_marketplace.payment.event.PaymentFailed;
 import ru.voropaev.event_driven_marketplace.payment.repository.PaymentRepository;
 
 import java.math.BigDecimal;
@@ -29,6 +30,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -100,6 +102,44 @@ class OrderSagaIntegrationTest {
                 .orElseThrow();
         assertEquals(payment.getId(), paymentCompleted.paymentId());
         assertEquals(payment.getGatewayTransactionId(), paymentCompleted.gatewayTransactionId());
+    }
+
+    @Test
+    void compensatesReservationAndCancelsOrder_whenPaymentIsDeclined(ApplicationEvents events) {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        stockRepository.save(new Stock(productId, new BigDecimal("10.13"), 10, 0));
+
+        // 1 x 10.13 = 10.13 -> копейки 13 -> шлюз отказывает
+        CreateOrderRequest request = new CreateOrderRequest(
+                List.of(new OrderItemRequest(productId, 1))
+        );
+
+        OrderResponse response = orderService.createOrder(customerId, request);
+
+        assertEquals(OrderStatus.CANCELLED, orderService.getOrder(response.id()).orderStatus());
+
+        // компенсация вернула товар на полку: было 10, зарезервировали 1, отпустили обратно
+        Stock compensatedStock = stockRepository.findByProductId(productId).orElseThrow();
+        assertEquals(10, compensatedStock.getAvailableQuantity());
+        assertEquals(0, compensatedStock.getReservedQuantity());
+
+        // резерв не удалён, а переведён в RELEASED — история саги остаётся в БД
+        List<Reservation> reservations = reservationRepository.findByOrderId(response.id());
+        assertEquals(1, reservations.size());
+        assertEquals(ReservationStatus.RELEASED, reservations.getFirst().getReservationStatus());
+
+        Payment payment = paymentRepository.findByOrderId(response.id()).orElseThrow();
+        assertEquals(PaymentStatus.FAILED, payment.getPaymentStatus());
+        assertEquals("insufficient funds", payment.getFailureReason());
+        assertNull(payment.getGatewayTransactionId());
+
+        PaymentFailed paymentFailed = events.stream(PaymentFailed.class)
+                .filter(e -> e.orderId().equals(response.id()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(payment.getId(), paymentFailed.paymentId());
+        assertEquals(customerId, paymentFailed.customerId());
     }
 
     @Test

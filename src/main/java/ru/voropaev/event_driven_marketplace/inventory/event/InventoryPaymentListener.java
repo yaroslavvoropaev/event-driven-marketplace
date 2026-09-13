@@ -7,6 +7,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.payment.event.PaymentCompleted;
+import ru.voropaev.event_driven_marketplace.payment.event.PaymentFailed;
 
 @Component
 public class InventoryPaymentListener {
@@ -31,6 +32,26 @@ public class InventoryPaymentListener {
                 if (attempts >= MAX_ATTEMPTS) {
                     log.error("Failed to confirm reservations for order {} after {} attempts, "
                                 + "payment succeeded but stock is not written off", event.orderId(), attempts, exception);
+                    return;
+                }
+            }
+        }
+    }
+
+
+    @EventListener
+    public void on(PaymentFailed event) {
+        int attempts = 0;
+
+        while (true) {
+            attempts++;
+            try {
+                inventoryService.releaseReservations(event.orderId());
+                return;
+            } catch (ObjectOptimisticLockingFailureException exception) {
+                if (attempts >= MAX_ATTEMPTS) {
+                    log.error("Failed to release reservations for order {} after {} attempts, "
+                            + "payment failed but stock is still reserved./gradlew test", event.orderId(), attempts, exception);
                     return;
                 }
             }

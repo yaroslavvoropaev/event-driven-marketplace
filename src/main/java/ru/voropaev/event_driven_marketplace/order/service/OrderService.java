@@ -12,4 +12,5 @@ public interface OrderService {
     OrderResponse confirmOrder(UUID id);
     OrderResponse startProcessing(UUID id);
     OrderResponse cancelOrderDueToReservationFailure(UUID id);
+    OrderResponse cancelOrderDueToPaymentFailure(UUID id);
 }

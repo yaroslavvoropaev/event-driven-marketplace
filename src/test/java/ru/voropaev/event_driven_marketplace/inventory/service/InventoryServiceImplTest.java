@@ -192,6 +192,86 @@ class InventoryServiceImplTest {
     }
 
     @Test
+    void releaseReservations_returnsStockToAvailableAndReleasesReservation() {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+
+        Stock stock = new Stock(productId, BigDecimal.TEN, 10, 0);
+        stock.reserve(3);
+        Reservation reservation = Reservation.reserved(orderId, productId, 3);
+
+        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of(reservation));
+        when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
+
+        inventoryService.releaseReservations(orderId);
+
+        assertEquals(ReservationStatus.RELEASED, reservation.getReservationStatus());
+        // компенсация возвращает товар на полку — в отличие от confirm, где он уезжает клиенту
+        assertEquals(0, stock.getReservedQuantity());
+        assertEquals(10, stock.getAvailableQuantity());
+    }
+
+    @Test
+    void releaseReservations_releasesEveryItemOfTheOrder() {
+        UUID orderId = UUID.randomUUID();
+        UUID productA = UUID.randomUUID();
+        UUID productB = UUID.randomUUID();
+
+        Stock stockA = new Stock(productA, BigDecimal.TEN, 10, 0);
+        Stock stockB = new Stock(productB, BigDecimal.TEN, 10, 0);
+        stockA.reserve(2);
+        stockB.reserve(5);
+
+        Reservation reservationA = Reservation.reserved(orderId, productA, 2);
+        Reservation reservationB = Reservation.reserved(orderId, productB, 5);
+
+        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of(reservationA, reservationB));
+        when(stockRepository.findByProductId(productA)).thenReturn(Optional.of(stockA));
+        when(stockRepository.findByProductId(productB)).thenReturn(Optional.of(stockB));
+
+        inventoryService.releaseReservations(orderId);
+
+        assertEquals(ReservationStatus.RELEASED, reservationA.getReservationStatus());
+        assertEquals(ReservationStatus.RELEASED, reservationB.getReservationStatus());
+        assertEquals(10, stockA.getAvailableQuantity());
+        assertEquals(10, stockB.getAvailableQuantity());
+    }
+
+    @Test
+    void releaseReservations_skipsAlreadyConfirmedReservations() {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+
+        Reservation alreadyConfirmed = Reservation.reserved(orderId, productId, 3);
+        alreadyConfirmed.confirm();
+
+        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of(alreadyConfirmed));
+
+        inventoryService.releaseReservations(orderId);
+
+        // товар уже уехал клиенту — вернуть его на полку компенсация не имеет права
+        assertEquals(ReservationStatus.CONFIRMED, alreadyConfirmed.getReservationStatus());
+        verifyNoInteractions(stockRepository);
+    }
+
+    @Test
+    void releaseReservations_isIdempotent_whenReservationAlreadyReleased() {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+
+        Reservation alreadyReleased = Reservation.reserved(orderId, productId, 3);
+        alreadyReleased.release();
+
+        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of(alreadyReleased));
+
+        inventoryService.releaseReservations(orderId);
+
+        // повторная доставка PaymentFailed не должна вернуть товар на полку дважды
+        assertEquals(ReservationStatus.RELEASED, alreadyReleased.getReservationStatus());
+        verifyNoInteractions(stockRepository);
+    }
+
+    @Test
     void confirmReservations_doesNothing_whenOrderHasNoReservations() {
         UUID orderId = UUID.randomUUID();
         when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of());
