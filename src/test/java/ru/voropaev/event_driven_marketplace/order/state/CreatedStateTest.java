@@ -1,7 +1,7 @@
 package ru.voropaev.event_driven_marketplace.order.state;
 
 import org.junit.jupiter.api.Test;
-import ru.voropaev.event_driven_marketplace.order.domain.state.InvalidOrderTransitionException;
+import ru.voropaev.event_driven_marketplace.order.domain.state.exception.InvalidOrderTransitionException;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 import ru.voropaev.event_driven_marketplace.order.domain.state.CreatedState;
 

@@ -1,5 +1,6 @@
 package ru.voropaev.event_driven_marketplace.user.service;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -41,7 +42,11 @@ public class AuthServiceImpl  implements AuthService{
 
         String hash = passwordEncoder.encode(request.password());
         User user = new User(request.email(), hash);
-        userRepository.save(user);
+        try {
+            userRepository.save(user);
+        } catch (DataIntegrityViolationException exception) {
+            throw new EmailAlreadyExistsException(user.getEmail());
+        }
         return toResponse(user);
     }
 

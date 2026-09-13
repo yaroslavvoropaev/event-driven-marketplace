@@ -1,5 +1,5 @@
 create schema
-if not exists payment;
+if not exists payment_service;
 
 create table payment (
     id                     uuid                     primary key,
@@ -14,4 +14,4 @@ create table payment (
 );
 
 alter table payment
-SET schema payment;
+set schema payment_service;

@@ -11,7 +11,7 @@ import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
-import ru.voropaev.event_driven_marketplace.order.domain.state.InvalidOrderTransitionException;
+import ru.voropaev.event_driven_marketplace.order.domain.state.exception.InvalidOrderTransitionException;
 import ru.voropaev.event_driven_marketplace.order.domain.Order;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderState;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStateResolver;

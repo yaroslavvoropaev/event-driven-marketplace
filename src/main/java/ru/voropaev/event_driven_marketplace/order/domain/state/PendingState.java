@@ -1,6 +1,7 @@
 package ru.voropaev.event_driven_marketplace.order.domain.state;
 
 import org.springframework.stereotype.Component;
+import ru.voropaev.event_driven_marketplace.order.domain.state.exception.InvalidOrderTransitionException;
 
 @Component
 public class PendingState implements OrderState {

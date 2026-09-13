@@ -16,17 +16,17 @@ import java.util.*;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Order {
     @Id
-    UUID id;
+    private UUID id;
 
-    UUID customerId;
+    private UUID customerId;
 
     @Enumerated(EnumType.STRING)
-    OrderStatus orderStatus;
+    private OrderStatus orderStatus;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    List<OrderItem> items = new ArrayList<>();
+    private final List<OrderItem> items = new ArrayList<>();
 
-    Instant createdAt;
+    private Instant createdAt;
 
     public Order(UUID customerId) {
         this.id = UUID.randomUUID();

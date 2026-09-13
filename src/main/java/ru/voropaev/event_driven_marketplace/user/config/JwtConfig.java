@@ -20,22 +20,22 @@ import java.security.interfaces.RSAPublicKey;
 public class JwtConfig {
     @Bean
     public RSAPublicKey rsaPublicKey() throws Exception {
-        try (InputStream is =  new ClassPathResource("certs/app.pub").getInputStream()) {
-            return RsaKeyConverters.x509().convert(is);
+        try (InputStream inputStream =  new ClassPathResource("certs/app.pub").getInputStream()) {
+            return RsaKeyConverters.x509().convert(inputStream);
         }
     }
 
     @Bean
     public RSAPrivateKey rsaPrivateKey() throws Exception {
-        try (InputStream is = new ClassPathResource("certs/app-pkcs8.key").getInputStream()) {
-            return RsaKeyConverters.pkcs8().convert(is);
+        try (InputStream inputStream = new ClassPathResource("certs/app-pkcs8.key").getInputStream()) {
+            return RsaKeyConverters.pkcs8().convert(inputStream);
         }
     }
 
     @Bean
     public JwtEncoder jwtEncoder(RSAPublicKey publicKey, RSAPrivateKey privateKey) {
         RSAKey jwk = new RSAKey.Builder(publicKey).privateKey(privateKey).build();
-        var jwkSource = new ImmutableJWKSet<>(new JWKSet(jwk));
+        var jwkSource =  new ImmutableJWKSet<>(new JWKSet(jwk));
         return new NimbusJwtEncoder(jwkSource);
     }
 
