@@ -11,7 +11,6 @@ public class InventoryReservationListener {
 
     private final OrderService orderService;
 
-
     public InventoryReservationListener(OrderService orderService) {
         this.orderService = orderService;
     }

@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Reservation;
+import ru.voropaev.event_driven_marketplace.inventory.domain.ReservationStatus;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Stock;
 import ru.voropaev.event_driven_marketplace.inventory.domain.exception.StockNotFoundException;
 import ru.voropaev.event_driven_marketplace.inventory.repository.ReservationRepository;
@@ -11,6 +12,8 @@ import ru.voropaev.event_driven_marketplace.inventory.repository.StockRepository
 import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -33,6 +36,41 @@ public class InventoryServiceImpl implements InventoryService {
             stock.reserve(item.quantity());
             Reservation reservation = Reservation.reserved(event.orderId(), item.productId(), item.quantity());
             reservationRepository.save(reservation);
+        }
+    }
+
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void confirmReservations(UUID orderId) {
+        List<Reservation> reservations = reservationRepository.findByOrderId(orderId)
+                .stream()
+                .filter(reservation -> reservation.getReservationStatus().equals(ReservationStatus.RESERVED))
+                .toList();
+
+        for (var reservation : reservations) {
+            Stock stock = stockRepository.findByProductId(reservation.getProductId())
+                    .orElseThrow(() -> new StockNotFoundException(reservation.getProductId()));
+            stock.confirm(reservation.getQuantity());
+            reservation.confirm();
+        }
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void releaseReservations(UUID orderId) {
+        List<Reservation> reservations = reservationRepository.findByOrderId(orderId)
+                .stream()
+                .filter(reservation -> reservation.getReservationStatus().equals(ReservationStatus.RESERVED))
+                .toList();
+
+
+        for (var reservation : reservations) {
+            Stock stock = stockRepository.findByProductId(reservation.getProductId())
+                    .orElseThrow(() -> new StockNotFoundException(reservation.getProductId()));
+
+            stock.reserve(reservation.getQuantity());
+            reservation.release();
         }
     }
 

@@ -9,6 +9,7 @@ public interface OrderService {
     OrderResponse createOrder(UUID customerId, CreateOrderRequest request);
     OrderResponse getOrder(UUID id);
     OrderResponse cancelOrder(UUID id);
+    OrderResponse confirmOrder(UUID id);
     OrderResponse startProcessing(UUID id);
     OrderResponse cancelOrderDueToReservationFailure(UUID id);
 }

@@ -8,6 +8,7 @@ import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.domain.*;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderState;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStateResolver;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
@@ -73,6 +74,15 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse cancelOrder(UUID id) {
         return doCancel(id);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public OrderResponse confirmOrder(UUID id) {
+        Order order = getOrderById(id);
+        OrderStatus newStatus = orderStateResolver.resolve(order.getOrderStatus()).confirm();
+        order.updateStatus(newStatus);
+        return toResponse(order);
     }
 
     @Override

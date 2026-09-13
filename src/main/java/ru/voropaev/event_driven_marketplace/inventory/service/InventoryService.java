@@ -8,4 +8,6 @@ import java.util.UUID;
 public interface InventoryService {
     BigDecimal getPrice(UUID productId);
     void reserveForOrder(OrderCreated event);
+    void confirmReservations(UUID orderId);
+    void releaseReservations(UUID orderId);
 }

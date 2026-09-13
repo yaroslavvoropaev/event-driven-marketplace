@@ -118,4 +118,37 @@ public class OrderServiceImplTest {
         assertThrows(InvalidOrderTransitionException.class, () -> orderService.cancelOrder(order.getId()));
     }
 
+    @Test
+    public void confirmsOrderWhenPaymentCompleted() {
+        Order order = new Order(UUID.randomUUID());
+        order.updateStatus(OrderStatus.PENDING);
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orderStateResolver.resolve(OrderStatus.PENDING)).thenReturn(orderState);
+        when(orderState.confirm()).thenReturn(OrderStatus.CONFIRMED);
+
+        OrderResponse response = orderService.confirmOrder(order.getId());
+
+        assertEquals(OrderStatus.CONFIRMED, response.orderStatus());
+        assertEquals(OrderStatus.CONFIRMED, order.getOrderStatus());
+    }
+
+    @Test
+    public void propagatesExceptionWhenConfirmIsIllegal() {
+        Order order = new Order(UUID.randomUUID());
+        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(orderStateResolver.resolve(OrderStatus.CREATED)).thenReturn(orderState);
+        when(orderState.confirm())
+                .thenThrow(new InvalidOrderTransitionException(OrderStatus.CREATED, "confirm"));
+
+        assertThrows(InvalidOrderTransitionException.class, () -> orderService.confirmOrder(order.getId()));
+    }
+
+    @Test
+    public void throwsNotFoundWhenConfirmingMissingOrder() {
+        UUID missingId = UUID.randomUUID();
+        when(orderRepository.findById(missingId)).thenReturn(Optional.empty());
+
+        assertThrows(OrderNotFoundException.class, () -> orderService.confirmOrder(missingId));
+    }
+
 }

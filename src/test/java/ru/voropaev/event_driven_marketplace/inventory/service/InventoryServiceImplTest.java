@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -125,5 +126,78 @@ class InventoryServiceImplTest {
         // Он покрыт отдельно в InventoryReservationIntegrationTest.
         assertEquals(3, stockA.getAvailableQuantity());
         verify(reservationRepository, times(1)).save(any(Reservation.class));
+    }
+
+    @Test
+    void confirmReservations_confirmsReservationAndWritesOffReservedStock() {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+
+        Stock stock = new Stock(productId, BigDecimal.TEN, 10, 0);
+        stock.reserve(3);
+        Reservation reservation = Reservation.reserved(orderId, productId, 3);
+
+        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of(reservation));
+        when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
+
+        inventoryService.confirmReservations(orderId);
+
+        assertEquals(ReservationStatus.CONFIRMED, reservation.getReservationStatus());
+        // товар уехал клиенту: резерв снят, но обратно в доступные он не возвращается
+        assertEquals(0, stock.getReservedQuantity());
+        assertEquals(7, stock.getAvailableQuantity());
+    }
+
+    @Test
+    void confirmReservations_confirmsEveryItemOfTheOrder() {
+        UUID orderId = UUID.randomUUID();
+        UUID productA = UUID.randomUUID();
+        UUID productB = UUID.randomUUID();
+
+        Stock stockA = new Stock(productA, BigDecimal.TEN, 10, 0);
+        Stock stockB = new Stock(productB, BigDecimal.TEN, 10, 0);
+        stockA.reserve(2);
+        stockB.reserve(5);
+
+        Reservation reservationA = Reservation.reserved(orderId, productA, 2);
+        Reservation reservationB = Reservation.reserved(orderId, productB, 5);
+
+        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of(reservationA, reservationB));
+        when(stockRepository.findByProductId(productA)).thenReturn(Optional.of(stockA));
+        when(stockRepository.findByProductId(productB)).thenReturn(Optional.of(stockB));
+
+        inventoryService.confirmReservations(orderId);
+
+        assertEquals(ReservationStatus.CONFIRMED, reservationA.getReservationStatus());
+        assertEquals(ReservationStatus.CONFIRMED, reservationB.getReservationStatus());
+        assertEquals(0, stockA.getReservedQuantity());
+        assertEquals(0, stockB.getReservedQuantity());
+    }
+
+    @Test
+    void confirmReservations_skipsReservationsThatAreNotReserved() {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+
+        Reservation alreadyConfirmed = Reservation.reserved(orderId, productId, 3);
+        alreadyConfirmed.confirm();
+
+        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of(alreadyConfirmed));
+
+        inventoryService.confirmReservations(orderId);
+
+        // повторная доставка события не должна ни падать, ни списывать товар второй раз
+        assertEquals(ReservationStatus.CONFIRMED, alreadyConfirmed.getReservationStatus());
+        verifyNoInteractions(stockRepository);
+    }
+
+    @Test
+    void confirmReservations_doesNothing_whenOrderHasNoReservations() {
+        UUID orderId = UUID.randomUUID();
+        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of());
+
+        inventoryService.confirmReservations(orderId);
+
+        verifyNoInteractions(stockRepository);
     }
 }
