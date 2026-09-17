@@ -13,7 +13,6 @@ import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service

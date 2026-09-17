@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Reservation;
@@ -47,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @RecordApplicationEvents
+@ActiveProfiles("test")
 class OrderSagaIntegrationTest {
 
     @Autowired
@@ -71,7 +73,7 @@ class OrderSagaIntegrationTest {
 
         OrderResponse response = orderService.createOrder(customerId, request);
 
-        assertEquals(OrderStatus.CONFIRMED, orderService.getOrder(response.id()).orderStatus());
+        assertEquals(OrderStatus.CONFIRMED, orderService.getOrder(response.id(), customerId).orderStatus());
 
         // товар уехал клиенту: из резерва списан, в доступные не вернулся
         Stock updatedStock = stockRepository.findByProductId(productId).orElseThrow();
@@ -117,7 +119,7 @@ class OrderSagaIntegrationTest {
 
         OrderResponse response = orderService.createOrder(customerId, request);
 
-        assertEquals(OrderStatus.CANCELLED, orderService.getOrder(response.id()).orderStatus());
+        assertEquals(OrderStatus.CANCELLED, orderService.getOrder(response.id(), customerId).orderStatus());
 
         // компенсация вернула товар на полку: было 10, зарезервировали 1, отпустили обратно
         Stock compensatedStock = stockRepository.findByProductId(productId).orElseThrow();
@@ -154,7 +156,7 @@ class OrderSagaIntegrationTest {
 
         OrderResponse response = orderService.createOrder(customerId, request);
 
-        assertEquals(OrderStatus.CANCELLED, orderService.getOrder(response.id()).orderStatus());
+        assertEquals(OrderStatus.CANCELLED, orderService.getOrder(response.id(), customerId).orderStatus());
 
         Stock unchangedStock = stockRepository.findByProductId(productId).orElseThrow();
         assertEquals(1, unchangedStock.getAvailableQuantity());

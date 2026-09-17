@@ -1,5 +1,167 @@
 ### GET request to example server
-GET https://examples.http-client.intellij.net/get
-    ?generated-in=IntelliJ IDEA
+GET localhost:8080/actuator/health
+###
+
+
+POST localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "alice@test.io",
+  "password": "password123"
+}
+
+
+### login alice
+POST localhost:8080/api/auth/login
+Content-Type: application/json
+
+{"email": "alice@test.io", "password": "password123"}
+
+> {% client.global.set("aliceToken", response.body.token); %}
+
+### O1: aaaa x1
+@productA =aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+POST localhost:8080/api/orders
+Content-Type: application/json
+Authorization: Bearer {{aliceToken}}
+
+{"items": [{"productId": "{{productA}}", "quantity": 1}]}
+
+> {% client.global.set("o1", response.body.id); %}
+
+### O1 через GET
+GET localhost:8080/api/orders/{{o1}}
+Authorization: Bearer {{aliceToken}}
+
+### O2: aaaa x2 + bbbb x3
+@productB =bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+POST localhost:8080/api/orders
+Content-Type: application/json
+Authorization: Bearer {{aliceToken}}
+
+{"items": [
+  {"productId": "{{productA}}", "quantity": 2},
+  {"productId": "{{productB}}", "quantity": 3}
+]}
+
+> {% client.global.set("o2", response.body.id); %}
+
+### O2 через GET
+GET localhost:8080/api/orders/{{o2}}
+Authorization: Bearer {{aliceToken}}
+
+
+
+### O3: cccc x10, а их 3
+@productC =cccccccc-cccc-cccc-cccc-cccccccccccc
+POST localhost:8080/api/orders
+Content-Type: application/json
+Authorization: Bearer {{aliceToken}}
+
+{"items": [{"productId": "{{productC}}", "quantity": 10}]}
+
+> {% client.global.set("o3", response.body.id); %}
+
+### O3 через GET
+GET localhost:8080/api/orders/{{o3}}
+Authorization: Bearer {{aliceToken}}
+
+### O4: aaaa x1 + cccc x10 — дефицитный ВТОРЫМ
+POST localhost:8080/api/orders
+Content-Type: application/json
+Authorization: Bearer {{aliceToken}}
+
+{"items": [
+  {"productId": "{{productA}}", "quantity": 1},
+  {"productId": "{{productC}}", "quantity": 10}
+]}
+
+> {% client.global.set("o4", response.body.id); %}
+
+### O4 через GET
+GET localhost:8080/api/orders/{{o4}}
+Authorization: Bearer {{aliceToken}}
+
+### O5: cccc x10 + aaaa x1 — дефицитный ПЕРВЫМ
+POST localhost:8080/api/orders
+Content-Type: application/json
+Authorization: Bearer {{aliceToken}}
+
+{"items": [
+  {"productId": "{{productC}}", "quantity": 10},
+  {"productId": "{{productA}}", "quantity": 1}
+]}
+
+> {% client.global.set("o5", response.body.id); %}
+
+### O5 через GET
+GET localhost:8080/api/orders/{{o5}}
+Authorization: Bearer {{aliceToken}}
+
+### O6: cccc x3 — забираем ровно всё
+POST localhost:8080/api/orders
+Content-Type: application/json
+Authorization: Bearer {{aliceToken}}
+
+{"items": [{"productId": "{{productC}}", "quantity": 3}]}
+
+> {% client.global.set("o6", response.body.id); %}
+
+### O6 через GET
+GET localhost:8080/api/orders/{{o6}}
+Authorization: Bearer {{aliceToken}}
+
+### O7: cccc x1, когда осталось 0
+POST localhost:8080/api/orders
+Content-Type: application/json
+Authorization: Bearer {{aliceToken}}
+
+{"items": [{"productId": "{{productC}}", "quantity": 1}]}
+
+> {% client.global.set("o7", response.body.id); %}
+
+### O7 через GET
+GET localhost:8080/api/orders/{{o7}}
+Authorization: Bearer {{aliceToken}}
 
 ###
+POST localhost:8080/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "bob@test.io",
+  "password": "password123"
+}
+
+###
+POST localhost:8080/api/auth/login
+Content-Type: application/json
+
+{"email": "bob@test.io", "password": "password123"}
+
+> {%
+    client.global.set("bobToken", response.body.token);
+    client.global.set("bobId", response.body.user.id);
+%}
+
+
+###
+GET localhost:8080/api/orders/{{o1}}
+Authorization: Bearer {{bobToken}}
+
+> {%
+    client.test("это чужой заказ", () =>
+        client.assert(response.body.customerId !== client.global.get("bobId")));
+%}
+
+
+###
+POST localhost:8080/api/orders/{{o1}}/cancel
+Authorization: Bearer {{bobToken}}
+###
+POST localhost:8080/api/orders/{{o3}}/cancel
+Authorization: Bearer {{bobToken}}
+###
+GET localhost:8080/api/orders/99999999-9999-9999-9999-999999999999
+Authorization: Bearer {{bobToken}}

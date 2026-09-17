@@ -7,8 +7,8 @@ import java.util.UUID;
 
 public interface OrderService {
     OrderResponse createOrder(UUID customerId, CreateOrderRequest request);
-    OrderResponse getOrder(UUID id);
-    OrderResponse cancelOrder(UUID id);
+    OrderResponse getOrder(UUID id, UUID customerId);
+    OrderResponse cancelOrder(UUID id, UUID customerId);
     OrderResponse confirmOrder(UUID id);
     OrderResponse startProcessing(UUID id);
     OrderResponse cancelOrderDueToReservationFailure(UUID id);

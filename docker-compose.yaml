@@ -1,0 +1,47 @@
+services:
+    postgres:
+        image: postgres:17
+        environment:
+            POSTGRES_DB: marketplace
+            POSTGRES_USER: marketplace
+            POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+        secrets:
+            -   db_password
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test: [ "CMD-SHELL", "pg_isready -U marketplace -d marketplace" ]
+            interval: 5s
+            timeout: 3s
+            retries: 10
+            start_period: 10s
+        restart: unless-stopped
+
+    app:
+        build: .
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            DB_URL: jdbc:postgresql://postgres:5432/marketplace
+            DB_USER: marketplace
+            JWT_PUBLIC_KEY: file:/run/secrets/jwt_public_key
+            JWT_PRIVATE_KEY: file:/run/secrets/jwt_private_key
+        secrets:
+            - source: db_password
+              target: spring.datasource.password
+            - jwt_public_key
+            - jwt_private_key
+        ports:
+            - "8080:8080"
+        restart: unless-stopped
+volumes:
+    postgres_data:
+
+secrets:
+    db_password:
+        file: ./secrets/db_password
+    jwt_public_key:
+        file: ./secrets/app.pub
+    jwt_private_key:
+        file: ./secrets/app-pkcs8.key

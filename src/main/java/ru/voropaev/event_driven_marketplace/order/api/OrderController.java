@@ -27,7 +27,7 @@ public class OrderController {
     ResponseEntity<OrderResponse> createOrder(
             @Valid @RequestBody CreateOrderRequest request,
             @AuthenticationPrincipal Jwt jwt) {
-        UUID customerId = UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
+        UUID customerId = currentCustomerId(jwt);
         OrderResponse orderResponse = orderService.createOrder(customerId, request);
 
         URI location = URI.create("/api/orders/" + orderResponse.id());
@@ -35,16 +35,27 @@ public class OrderController {
     }
 
     @GetMapping("/{id}")
-    ResponseEntity<OrderResponse> getOrder(@PathVariable UUID id) {
-        OrderResponse orderResponse = orderService.getOrder(id);
+    ResponseEntity<OrderResponse> getOrder(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID customerId = currentCustomerId(jwt);
+        OrderResponse orderResponse = orderService.getOrder(id, customerId);
 
         return ResponseEntity.status(HttpStatus.OK).body(orderResponse);
     }
 
     @PostMapping("/{id}/cancel")
-    ResponseEntity<OrderResponse> cancelOrder(@PathVariable UUID id) {
-        OrderResponse orderResponse = orderService.cancelOrder(id);
+    ResponseEntity<OrderResponse> cancelOrder(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        UUID customerId = currentCustomerId(jwt);
+        OrderResponse orderResponse = orderService.cancelOrder(id, customerId);
 
         return ResponseEntity.status(HttpStatus.OK).body(orderResponse);
+    }
+
+    private UUID currentCustomerId(Jwt jwt) {
+        return UUID.fromString(Objects.requireNonNull(jwt.getSubject()));
     }
 }

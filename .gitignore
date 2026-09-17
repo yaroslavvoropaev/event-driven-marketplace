@@ -1,5 +1,7 @@
-src/main/resources/certs/app.key
-src/main/resources/certs/app-pkcs8.key
+docker-compose.override.yaml
+src/main/resources/test.http
+.env
+secrets/
 HELP.md
 .gradle
 build/

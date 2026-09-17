@@ -1,5 +1,7 @@
 package ru.voropaev.event_driven_marketplace.order.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -23,6 +25,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderStateResolver orderStateResolver;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final InventoryService inventoryService;
+    private static final Logger log = LoggerFactory.getLogger(OrderServiceImpl.class);
 
     public OrderServiceImpl(OrderRepository orderRepository, OrderStateResolver orderStateResolver, ApplicationEventPublisher applicationEventPublisher, InventoryService inventoryService) {
         this.orderRepository = orderRepository;
@@ -62,8 +65,8 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public OrderResponse getOrder(UUID id) {
-        Order order = getOrderById(id);
+    public OrderResponse getOrder(UUID id, UUID customerId) {
+        Order order = getOwnOrderById(id, customerId);
 
         return toResponse(order);
 
@@ -71,8 +74,9 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public OrderResponse cancelOrder(UUID id) {
-        return doCancel(id);
+    public OrderResponse cancelOrder(UUID id, UUID customerId) {
+        Order order = getOwnOrderById(id, customerId);
+        return doCancel(order);
     }
 
     @Override
@@ -87,13 +91,15 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public OrderResponse cancelOrderDueToReservationFailure(UUID id) {
-        return doCancel(id);
+        Order order = getOrderById(id);
+        return doCancel(order);
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public OrderResponse cancelOrderDueToPaymentFailure(UUID id) {
-        return doCancel(id);
+        Order order = getOrderById(id);
+        return doCancel(order);
     }
 
     @Override
@@ -105,8 +111,7 @@ public class OrderServiceImpl implements OrderService {
         return toResponse(order);
     }
 
-    private OrderResponse doCancel(UUID id) {
-        Order order = getOrderById(id);
+    private OrderResponse doCancel(Order order) {
         OrderStatus newStatus = orderStateResolver.resolve(order.getOrderStatus()).cancel();
         order.updateStatus(newStatus);
         return toResponse(order);
@@ -116,6 +121,17 @@ public class OrderServiceImpl implements OrderService {
         return orderRepository.findById(id)
                 .orElseThrow(() -> new OrderNotFoundException(id));
     }
+
+    private Order getOwnOrderById(UUID id, UUID customerId) {
+        Order order = getOrderById(id);
+        if (!order.getCustomerId().equals(customerId)) {
+            log.warn("Customer {} attempted to access order {} owned by {}",
+                    customerId, id, order.getCustomerId());
+            throw new OrderNotFoundException(id);
+        }
+        return order;
+    }
+
 
     private OrderResponse toResponse(Order order) {
         return new OrderResponse(

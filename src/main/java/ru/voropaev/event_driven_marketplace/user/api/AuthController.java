@@ -12,6 +12,7 @@ import ru.voropaev.event_driven_marketplace.user.api.dto.RegisterRequest;
 import ru.voropaev.event_driven_marketplace.user.api.dto.UserResponse;
 import ru.voropaev.event_driven_marketplace.user.service.AuthService;
 
+
 @RestController
 @RequestMapping("api/auth")
 public class AuthController {

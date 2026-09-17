@@ -1,0 +1,10 @@
+docker-compose.override.yaml
+.env
+.git
+.gradle
+build/
+secrets/
+.idea/
+*.iml
+Dockerfile
+docker-compose.yml
