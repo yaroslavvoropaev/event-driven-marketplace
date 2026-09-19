@@ -17,7 +17,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     ResponseEntity<ErrorResponse> handleBadRequest(MethodArgumentTypeMismatchException exception) {
-        ErrorResponse errorResponse = new ErrorResponse("parameter 'id', expected UUID" +exception.getRequiredType().getSimpleName());
+        ErrorResponse errorResponse = new ErrorResponse("parameter '" + exception.getName()
+                + "', expected " + exception.getRequiredType().getSimpleName());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
     }
 

@@ -9,15 +9,18 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.voropaev.event_driven_marketplace.inventory.domain.exception.StockNotFoundException;
 import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
-import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.domain.*;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStateResolver;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
+import ru.voropaev.event_driven_marketplace.order.event.CancellationReason;
+import ru.voropaev.event_driven_marketplace.order.event.OrderCancelled;
+import ru.voropaev.event_driven_marketplace.order.event.OrderConfirmed;
 import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 import ru.voropaev.event_driven_marketplace.order.repository.OrderRepository;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -79,7 +82,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse cancelOrder(UUID id, UUID customerId) {
         Order order = getOwnOrderById(id, customerId);
-        return doCancel(order);
+        return doCancel(order, CancellationReason.CUSTOMER_REQUEST);
     }
 
     @Override
@@ -88,6 +91,12 @@ public class OrderServiceImpl implements OrderService {
         Order order = getOrderById(id);
         OrderStatus newStatus = orderStateResolver.resolve(order.getOrderStatus()).confirm();
         order.updateStatus(newStatus);
+        applicationEventPublisher.publishEvent(new OrderConfirmed(
+                order.getId(),
+                order.getCustomerId(),
+                order.getTotalAmount(),
+                Instant.now()
+        ));
         return toResponse(order);
     }
 
@@ -95,14 +104,14 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public OrderResponse cancelOrderDueToReservationFailure(UUID id) {
         Order order = getOrderById(id);
-        return doCancel(order);
+        return doCancel(order, CancellationReason.RESERVATION_FAILED);
     }
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public OrderResponse cancelOrderDueToPaymentFailure(UUID id) {
         Order order = getOrderById(id);
-        return doCancel(order);
+        return doCancel(order, CancellationReason.PAYMENT_FAILED);
     }
 
     @Override
@@ -114,17 +123,19 @@ public class OrderServiceImpl implements OrderService {
         return toResponse(order);
     }
 
-    private OrderResponse doCancel(Order order) {
+    private OrderResponse doCancel(Order order, CancellationReason reason) {
         OrderStatus newStatus = orderStateResolver.resolve(order.getOrderStatus()).cancel();
         order.updateStatus(newStatus);
+        applicationEventPublisher.publishEvent(new OrderCancelled(
+                order.getId(),
+                order.getCustomerId(),
+                order.getTotalAmount(),
+                reason,
+                Instant.now()
+        ));
         return toResponse(order);
     }
 
-    /**
-     * Граница домена: наружу order отдаёт своё исключение, а не чужое из inventory.
-     * Иначе HTTP-слой order пришлось бы учить исключениям соседнего домена, и при
-     * распиле на сервисы эта связь сломалась бы первой.
-     */
     private BigDecimal priceOf(UUID productId) {
         try {
             return inventoryService.getPrice(productId);

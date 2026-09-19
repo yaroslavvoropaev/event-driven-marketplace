@@ -10,8 +10,9 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import ru.voropaev.event_driven_marketplace.common.retry.OptimisticLockRetrier;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Stock;
 import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
-import ru.voropaev.event_driven_marketplace.payment.event.PaymentCompleted;
-import ru.voropaev.event_driven_marketplace.payment.event.PaymentFailed;
+import ru.voropaev.event_driven_marketplace.order.event.CancellationReason;
+import ru.voropaev.event_driven_marketplace.order.event.OrderCancelled;
+import ru.voropaev.event_driven_marketplace.order.event.OrderConfirmed;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,7 +23,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class InventoryPaymentListenerTest {
+class InventoryOrderListenerTest {
 
     private static final int MAX_ATTEMPTS = 3;
 
@@ -31,7 +32,7 @@ class InventoryPaymentListenerTest {
     @Mock
     private InventoryService inventoryService;
 
-    private InventoryPaymentListener listener;
+    private InventoryOrderListener listener;
 
     /**
      * Ретраер настоящий, а не мок: число попыток — часть наблюдаемого поведения
@@ -40,27 +41,28 @@ class InventoryPaymentListenerTest {
      */
     @BeforeEach
     void setUp() {
-        listener = new InventoryPaymentListener(
+        listener = new InventoryOrderListener(
                 inventoryService,
                 new OptimisticLockRetrier(MAX_ATTEMPTS, 0)
         );
     }
 
-    private final PaymentCompleted event = new PaymentCompleted(
+    /**
+     * Резерв списывается и отпускается по событиям order, а не payment: inventory
+     * реагирует на судьбу заказа, а платёж — лишь одна из её причин.
+     */
+    private final OrderConfirmed event = new OrderConfirmed(
             ORDER_ID,
             UUID.randomUUID(),
-            UUID.randomUUID(),
             new BigDecimal("199.00"),
-            "fake-tx-1",
             Instant.now()
     );
 
-    private final PaymentFailed paymentFailed = new PaymentFailed(
+    private final OrderCancelled orderCancelled = new OrderCancelled(
             ORDER_ID,
             UUID.randomUUID(),
-            UUID.randomUUID(),
             new BigDecimal("199.13"),
-            "insufficient funds",
+            CancellationReason.PAYMENT_FAILED,
             Instant.now()
     );
 
@@ -102,8 +104,8 @@ class InventoryPaymentListenerTest {
     }
 
     @Test
-    void releasesReservationsOfTheFailedOrder() {
-        listener.on(paymentFailed);
+    void releasesReservationsOfTheCancelledOrder() {
+        listener.on(orderCancelled);
 
         verify(inventoryService).releaseReservations(ORDER_ID);
     }
@@ -114,22 +116,22 @@ class InventoryPaymentListenerTest {
                 .doNothing()
                 .when(inventoryService).releaseReservations(ORDER_ID);
 
-        listener.on(paymentFailed);
+        listener.on(orderCancelled);
 
         verify(inventoryService, times(2)).releaseReservations(ORDER_ID);
     }
 
     /**
-     * Компенсация не удалась. Выхода нет: платёж провален, заказ отменён, а товар
-     * остаётся висеть в резерве и никому не доступен. Листенер обязан сдаться и
-     * оставить след в логе — чинится это только вручную или будущим Outbox'ом.
+     * Компенсация не удалась. Выхода нет: заказ отменён, а товар остаётся висеть
+     * в резерве и никому не доступен. Листенер обязан сдаться и оставить след в
+     * логе — чинится это только вручную или будущим Outbox'ом.
      */
     @Test
     @Timeout(5)
     void givesUpRelease_afterMaxAttempts() {
         doThrow(versionConflict()).when(inventoryService).releaseReservations(ORDER_ID);
 
-        listener.on(paymentFailed);
+        listener.on(orderCancelled);
 
         verify(inventoryService, times(MAX_ATTEMPTS)).releaseReservations(ORDER_ID);
     }

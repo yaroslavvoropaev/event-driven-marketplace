@@ -18,6 +18,11 @@ import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
+import ru.voropaev.event_driven_marketplace.order.domain.state.exception.InvalidOrderTransitionException;
+import ru.voropaev.event_driven_marketplace.order.event.CancellationReason;
+import ru.voropaev.event_driven_marketplace.order.event.OrderCancelled;
+import ru.voropaev.event_driven_marketplace.order.event.OrderConfirmed;
+import ru.voropaev.event_driven_marketplace.order.service.OrderNotFoundException;
 import ru.voropaev.event_driven_marketplace.order.service.OrderService;
 import ru.voropaev.event_driven_marketplace.payment.domain.Payment;
 import ru.voropaev.event_driven_marketplace.payment.domain.state.PaymentStatus;
@@ -32,6 +37,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -104,6 +110,15 @@ class OrderSagaIntegrationTest {
                 .orElseThrow();
         assertEquals(payment.getId(), paymentCompleted.paymentId());
         assertEquals(payment.getGatewayTransactionId(), paymentCompleted.gatewayTransactionId());
+
+        // товар списывается по факту подтверждения заказа, а не по факту оплаты:
+        // inventory узнаёт исход от order и ничего не знает про платёжный домен
+        OrderConfirmed orderConfirmed = events.stream(OrderConfirmed.class)
+                .filter(e -> e.orderId().equals(response.id()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(customerId, orderConfirmed.customerId());
+        assertEquals(0, orderConfirmed.totalAmount().compareTo(response.totalAmount()));
     }
 
     @Test
@@ -142,6 +157,8 @@ class OrderSagaIntegrationTest {
                 .orElseThrow();
         assertEquals(payment.getId(), paymentFailed.paymentId());
         assertEquals(customerId, paymentFailed.customerId());
+
+        assertEquals(CancellationReason.PAYMENT_FAILED, cancellationReasonOf(events, response.id()));
     }
 
     @Test
@@ -170,5 +187,107 @@ class OrderSagaIntegrationTest {
         boolean reservationFailed = events.stream(InventoryReservationFailed.class)
                 .anyMatch(e -> e.orderId().equals(response.id()));
         assertTrue(reservationFailed);
+
+        assertEquals(CancellationReason.RESERVATION_FAILED, cancellationReasonOf(events, response.id()));
+    }
+
+    /**
+     * Причина отмены — часть контракта события, а не служебная деталь: notification
+     * будет писать разный текст для «вы отменили сами», «товара не хватило» и
+     * «платёж отклонён». Поэтому каждый из трёх путей отмены проверяется отдельно.
+     */
+    private CancellationReason cancellationReasonOf(ApplicationEvents events, UUID orderId) {
+        return events.stream(OrderCancelled.class)
+                .filter(e -> e.orderId().equals(orderId))
+                .findFirst()
+                .orElseThrow()
+                .reason();
+    }
+
+    /**
+     * Ручная отмена — единственный путь, на котором резерв раньше терялся навсегда:
+     * заказ уходил в CANCELLED, а товар оставался занятым, потому что резерв отпускал
+     * только слушатель PaymentFailed.
+     * <p>
+     * Фикстура — зависшая сага: копейки {@code 99} заставляют шлюз не ответить, событий
+     * не публикуется, и заказ остаётся в PENDING с живым резервом. Это единственное
+     * состояние, из которого отмену вообще можно позвать: при любом другом исходе сага
+     * доводит заказ до терминального статуса внутри createOrder.
+     */
+    @Test
+    void returnsStockToTheShelf_whenCustomerCancelsPendingOrder(ApplicationEvents events) {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        stockRepository.save(new Stock(productId, new BigDecimal("10.99"), 10, 0));
+
+        OrderResponse response = orderService.createOrder(customerId, new CreateOrderRequest(
+                List.of(new OrderItemRequest(productId, 1))
+        ));
+
+        assertEquals(OrderStatus.PENDING, orderService.getOrder(response.id(), customerId).orderStatus());
+        Stock reserved = stockRepository.findByProductId(productId).orElseThrow();
+        assertEquals(9, reserved.getAvailableQuantity());
+        assertEquals(1, reserved.getReservedQuantity());
+
+        orderService.cancelOrder(response.id(), customerId);
+
+        assertEquals(OrderStatus.CANCELLED, orderService.getOrder(response.id(), customerId).orderStatus());
+
+        Stock released = stockRepository.findByProductId(productId).orElseThrow();
+        assertEquals(10, released.getAvailableQuantity());
+        assertEquals(0, released.getReservedQuantity());
+
+        List<Reservation> reservations = reservationRepository.findByOrderId(response.id());
+        assertEquals(1, reservations.size());
+        assertEquals(ReservationStatus.RELEASED, reservations.getFirst().getReservationStatus());
+
+        assertEquals(CancellationReason.CUSTOMER_REQUEST, cancellationReasonOf(events, response.id()));
+    }
+
+    /**
+     * Повторная отмена отбивается state machine до публикации события, поэтому резерв
+     * не отпускается второй раз. Если бы отбилась позже, release прошёл бы дважды и
+     * вернул на полку вдвое больше товара, чем было снято.
+     */
+    @Test
+    void doesNotReleaseStockTwice_whenCancelIsRepeated() {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        stockRepository.save(new Stock(productId, new BigDecimal("10.99"), 10, 0));
+
+        OrderResponse response = orderService.createOrder(customerId, new CreateOrderRequest(
+                List.of(new OrderItemRequest(productId, 1))
+        ));
+        orderService.cancelOrder(response.id(), customerId);
+
+        assertThrows(InvalidOrderTransitionException.class,
+                () -> orderService.cancelOrder(response.id(), customerId));
+
+        Stock stock = stockRepository.findByProductId(productId).orElseThrow();
+        assertEquals(10, stock.getAvailableQuantity());
+        assertEquals(0, stock.getReservedQuantity());
+    }
+
+    /**
+     * Отмена чужого заказа не должна доходить до inventory: проверка владельца стоит
+     * раньше смены статуса, значит OrderCancelled не публикуется и резерв остаётся.
+     */
+    @Test
+    void keepsStockReserved_whenStrangerTriesToCancel() {
+        UUID productId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        stockRepository.save(new Stock(productId, new BigDecimal("10.99"), 10, 0));
+
+        OrderResponse response = orderService.createOrder(customerId, new CreateOrderRequest(
+                List.of(new OrderItemRequest(productId, 1))
+        ));
+
+        assertThrows(OrderNotFoundException.class,
+                () -> orderService.cancelOrder(response.id(), UUID.randomUUID()));
+
+        Stock stock = stockRepository.findByProductId(productId).orElseThrow();
+        assertEquals(9, stock.getAvailableQuantity());
+        assertEquals(1, stock.getReservedQuantity());
+        assertEquals(OrderStatus.PENDING, orderService.getOrder(response.id(), customerId).orderStatus());
     }
 }

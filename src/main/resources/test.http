@@ -26,48 +26,11 @@ POST localhost:8080/api/orders
 Content-Type: application/json
 Authorization: Bearer {{aliceToken}}
 
-### V1: пустой items
-@host =localhost:8080
-POST {{host}}/api/orders
-Content-Type: application/json
-Authorization: Bearer {{aliceToken}}
+{"items": [{"productId": "99999999-9999-9999-9999-999999999999", "quantity": -5}]}
 
-{"items": []}
+> {% client.global.set("o6", response.body.id); %}
 
 ###
-POST {{host}}/api/orders
+GET localhost:8080/api/orders/99999999-9999-9999-9999-999999999999
 Content-Type: application/json
 Authorization: Bearer {{aliceToken}}
-
-{}
-
-### V3: productId не UUID
-POST {{host}}/api/orders
-Content-Type: application/json
-Authorization: Bearer {{aliceToken}}
-
-{"items": [{"productId": "not-a-uuid", "quantity": 1}]}
-
-###
-GET {{host}}/api/orders/not-a-uuid
-Authorization: Bearer {{aliceToken}}
-
-
-### V5: productId = null
-POST {{host}}/api/orders
-Content-Type: application/json
-Authorization: Bearer {{aliceToken}}
-
-{"items": [{"productId": null, "quantity": 1}]}
-
-### V6: несуществующий товар
-POST {{host}}/api/orders
-Content-Type: application/json
-Authorization: Bearer {{aliceToken}}
-
-{"items": [{"productId": "dddddddd-dddd-dddd-dddd-dddddddddddd", "quantity": 1}]}
-
-###
-@o1 =110231
-GET {{host}}/api/orders/{{o1}}
-Authorization: Bearer garbage
