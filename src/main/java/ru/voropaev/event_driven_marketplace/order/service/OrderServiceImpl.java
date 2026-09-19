@@ -6,8 +6,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.voropaev.event_driven_marketplace.inventory.domain.exception.StockNotFoundException;
 import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
+import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.domain.*;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStateResolver;
@@ -15,6 +17,7 @@ import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 import ru.voropaev.event_driven_marketplace.order.repository.OrderRepository;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -38,7 +41,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse createOrder(UUID customerId, CreateOrderRequest request) {
         List<OrderItem> orderItems = request.items().stream()
-                .map(item -> new OrderItem(item.productId(), item.quantity(), inventoryService.getPrice(item.productId())))
+                .map(item -> new OrderItem(item.productId(), item.quantity(), priceOf(item.productId())))
                 .toList();
 
         Order order = new Order(customerId);
@@ -115,6 +118,19 @@ public class OrderServiceImpl implements OrderService {
         OrderStatus newStatus = orderStateResolver.resolve(order.getOrderStatus()).cancel();
         order.updateStatus(newStatus);
         return toResponse(order);
+    }
+
+    /**
+     * Граница домена: наружу order отдаёт своё исключение, а не чужое из inventory.
+     * Иначе HTTP-слой order пришлось бы учить исключениям соседнего домена, и при
+     * распиле на сервисы эта связь сломалась бы первой.
+     */
+    private BigDecimal priceOf(UUID productId) {
+        try {
+            return inventoryService.getPrice(productId);
+        } catch (StockNotFoundException exception) {
+            throw new UnknownProductException(productId);
+        }
     }
 
     private Order getOrderById(UUID id) {

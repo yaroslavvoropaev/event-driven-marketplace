@@ -143,6 +143,31 @@ class AuthControllerIntegrationTest {
                 "ошибка разбора тела не должна выглядеть как отказ в авторизации");
     }
 
+    /**
+     * Тело нечитаемого запроса нельзя возвращать клиенту даже кусочком: сообщение
+     * Jackson содержит фрагмент разбираемого JSON, а на /api/auth/register в этом
+     * фрагменте лежит пароль. Поэтому обработчик обязан отдавать константу, а не
+     * exception.getMessage() — тест закрепляет именно это, а не только отсутствие
+     * пароля (в конкретном сообщении его может случайно не оказаться).
+     */
+    @Test
+    void returnsConstantMessage_whenBodyIsNotJson() throws Exception {
+        String submittedPassword = "sekret-inside-broken-json";
+
+        HttpResponse<String> response = post("/api/auth/register",
+                """
+                {"email": "%s", "password": "%s",}
+                """.formatted(uniqueEmail(), submittedPassword));
+
+        assertEquals(400, response.statusCode());
+        assertTrue(response.body().contains("Malformed request body"),
+                "ожидалась константа вместо сообщения парсера, пришло: " + response.body());
+        assertFalse(response.body().contains(submittedPassword),
+                "присланный пароль попал в тело ответа: " + response.body());
+        assertFalse(response.body().contains("JSON parse error"),
+                "наружу утекло сообщение Jackson: " + response.body());
+    }
+
     @Test
     void returnsConflict_whenEmailAlreadyRegistered() throws Exception {
         String email = uniqueEmail();

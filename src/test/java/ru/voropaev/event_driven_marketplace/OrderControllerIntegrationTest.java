@@ -9,6 +9,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
@@ -26,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -70,7 +73,80 @@ public class OrderControllerIntegrationTest {
                         .with(jwtFor(UUID.randomUUID()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("items")));
+    }
+
+    /**
+     * Нулевое количество проходило валидацию и доезжало до конца саги: заказ на ноль штук
+     * за ноль рублей получал статус CONFIRMED.
+     */
+    @Test
+    @Transactional
+    public void createOrder_returnsBadRequest_whenQuantityIsZero() throws Exception {
+        mockMvc.perform(postOrder(UUID.randomUUID(), SEEDED_PRODUCT_ID, 0))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("quantity")));
+    }
+
+    /**
+     * Отрицательное количество было хуже нулевого: Stock.reserve(-5) проходил проверку
+     * canReserve и увеличивал доступный остаток, то есть товар печатался из воздуха,
+     * а платёж выписывался на отрицательную сумму.
+     */
+    @Test
+    @Transactional
+    public void createOrder_returnsBadRequest_whenQuantityIsNegative() throws Exception {
+        mockMvc.perform(postOrder(UUID.randomUUID(), SEEDED_PRODUCT_ID, -5))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("quantity")));
+    }
+
+    @Test
+    @Transactional
+    public void createOrder_returnsBadRequest_whenProductIdIsNull() throws Exception {
+        mockMvc.perform(post("/api/orders")
+                        .with(jwtFor(UUID.randomUUID()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\": [{\"productId\": null, \"quantity\": 1}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", containsString("productId")));
+    }
+
+    @Test
+    @Transactional
+    public void createOrder_returnsBadRequest_whenBodyIsNotJson() throws Exception {
+        mockMvc.perform(post("/api/orders")
+                        .with(jwtFor(UUID.randomUUID()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\": [{\"productId\": \"not-a-uuid\", \"quantity\": 1}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Malformed request body"));
+    }
+
+    /**
+     * КРАСНЫЙ, пока StockNotFoundException протекает из inventory наружу: сейчас это 500.
+     * Ссылка на несуществующий товар — ошибка клиента в теле запроса, а не отказ сервера.
+     */
+    @Test
+    @Transactional
+    public void createOrder_returnsBadRequest_whenProductDoesNotExist() throws Exception {
+        mockMvc.perform(postOrder(UUID.randomUUID(), UUID.randomUUID(), 1))
                 .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * КРАСНЫЙ, пока обработчик отдаёт exception.getMessage(): наружу уезжают внутренние
+     * типы вида java.util.UUID и присланное значение. То же исключение возникает и на
+     * @RequestParam, где в значении может оказаться что угодно.
+     */
+    @Test
+    @Transactional
+    public void getOrder_returnsBadRequestWithoutInternals_whenIdIsNotUuid() throws Exception {
+        mockMvc.perform(get("/api/orders/{id}", "not-a-uuid").with(jwtFor(UUID.randomUUID())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", not(containsString("java.util"))))
+                .andExpect(jsonPath("$.message", not(containsString("not-a-uuid"))));
     }
 
     @Test
@@ -207,6 +283,17 @@ public class OrderControllerIntegrationTest {
 
     private static JwtRequestPostProcessor jwtFor(UUID customerId) {
         return jwt().jwt(builder -> builder.subject(customerId.toString()));
+    }
+
+    private MockHttpServletRequestBuilder postOrder(UUID customerId, UUID productId, int quantity)
+            throws Exception {
+        CreateOrderRequest request = new CreateOrderRequest(
+                List.of(new OrderItemRequest(productId, quantity)));
+
+        return post("/api/orders")
+                .with(jwtFor(customerId))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request));
     }
 
     private UUID createOrderAndGetId(UUID customerId) throws Exception {
