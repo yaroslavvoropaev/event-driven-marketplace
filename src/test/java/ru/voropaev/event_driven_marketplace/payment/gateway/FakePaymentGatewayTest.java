@@ -5,7 +5,6 @@ import ru.voropaev.event_driven_marketplace.payment.gateway.exception.PaymentDec
 import ru.voropaev.event_driven_marketplace.payment.gateway.exception.PaymentGatewayUnavailableException;
 
 import java.math.BigDecimal;
-import java.util.NoSuchElementException;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,7 +55,7 @@ public class FakePaymentGatewayTest {
 
     @Test
     void extraScaleDoesNotChangeTheOutcome() {
-        assertThrows(NoSuchElementException.class, () -> charge("199.130"));
+        assertThrows(PaymentDeclinedException.class, () -> charge("199.130"));
         assertThrows(PaymentGatewayUnavailableException.class, () -> charge("199.990"));
     }
 
