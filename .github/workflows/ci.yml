@@ -16,9 +16,6 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      - name: Inspect runner
-        run: |
-          java -version
-          echo "JAVA_HOME=$JAVA_HOME"
-          
+      - uses: gradle/actions/setup-gradle@v6
+
       - run: ./gradlew testClasses
