@@ -26,6 +26,9 @@ services:
       DB_USER: marketplace
       JWT_PUBLIC_KEY: file:/run/secrets/jwt_public_key
       JWT_PRIVATE_KEY: file:/run/secrets/jwt_private_key
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=60"
+    mem_limit: 768m
+    stop_grace_period: 40s
     secrets:
       - source: db_password
         target: spring.datasource.password
