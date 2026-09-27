@@ -1,4 +1,3 @@
-docker-compose.override.yaml
 src/main/resources/test.http
 .env
 secrets/

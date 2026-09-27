@@ -1,4 +1,8 @@
 services:
-    postgres:
-        ports:
-            - "127.0.0.1:5432:5432"
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"

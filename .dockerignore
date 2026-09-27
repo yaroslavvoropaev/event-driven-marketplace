@@ -1,4 +1,3 @@
-docker-compose.override.yaml
 .env
 .git
 .gradle
@@ -7,4 +6,5 @@ secrets/
 .idea/
 *.iml
 Dockerfile
-docker-compose.yml
+docker-compose*.yaml
+.github
