@@ -56,14 +56,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # тег — полный SHA без префикса: его ждут deploy.sh и шаг Deploy (github.sha)
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: type=sha,format=long,prefix=
+
       - uses: docker/build-push-action@v7
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository }}:${{ github.sha }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -80,6 +87,9 @@ jobs:
           KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
           HOST: ${{ vars.DEPLOY_HOST }}
         run: |
+          : "${SSH_KEY:?DEPLOY_SSH_KEY secret is empty}"
+          : "${KNOWN_HOSTS:?DEPLOY_KNOWN_HOSTS variable is empty}"
+          : "${HOST:?DEPLOY_HOST variable is empty}"
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
