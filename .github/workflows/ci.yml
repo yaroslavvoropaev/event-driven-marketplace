@@ -106,7 +106,7 @@ jobs:
           chmod 600 ~/.ssh/config
 
       - name: Copy files
-        run: scp docker-compose.yaml docker-compose.prod.yaml deploy/deploy.sh prod:/opt/marketplace/
+        run: scp docker-compose.yaml docker-compose.prod.yaml deploy/deploy.sh deploy/Caddyfile prod:/opt/marketplace/
 
       - name: Deploy
         run: ssh prod 'bash /opt/marketplace/deploy.sh ${{ github.sha }}'

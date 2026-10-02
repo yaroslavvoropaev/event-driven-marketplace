@@ -28,6 +28,9 @@ docker compose pull app
 # 4. Пересоздаётся только то, что изменилось (контейнер app)
 docker compose up -d
 
+# up -d не замечает изменений в примонтированном Caddyfile — просим Caddy перечитать его без остановки
+docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+
 # 5. Ждём health до ~90 секунд
 for i in $(seq 1 30); do
   if docker run --rm --network marketplace_default curlimages/curl -fsS http://app:8080/actuator/health > /dev/null 2>&1; then

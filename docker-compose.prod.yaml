@@ -1,3 +1,23 @@
 services:
   app:
     image: ghcr.io/yaroslavvoropaev/event-driven-marketplace:${APP_TAG:?APP_TAG is not set}
+
+  # единственная точка входа снаружи: HTTPS (сертификат Let's Encrypt) → app:8080
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # сертификаты и ACME-аккаунт: без volume каждый пересозданный контейнер
+      # запрашивает новый сертификат и быстро упирается в лимиты Let's Encrypt
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
