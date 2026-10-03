@@ -1,4 +1,4 @@
-package ru.voropaev.event_driven_marketplace.order.service;
+package ru.voropaev.event_driven_marketplace.order.service.exception;
 
 import java.util.UUID;
 

@@ -31,4 +31,9 @@ public class CancelledStateTest {
         assertThrows(InvalidOrderTransitionException.class, state::startProcessing);
     }
 
+    @Test
+    void cancelByCustomerIsNotAllowed() {
+        assertThrows(InvalidOrderTransitionException.class, state::cancelByCustomer);
+    }
+
 }

@@ -31,4 +31,9 @@ public class CreatedStateTest {
         assertThrows(InvalidOrderTransitionException.class, state::confirm);
     }
 
+    @Test
+    void cancelByCustomerMovesToCancelled() {
+        assertEquals(OrderStatus.CANCELLED, state.cancelByCustomer());
+    }
+
 }

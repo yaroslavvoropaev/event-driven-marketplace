@@ -28,6 +28,9 @@ public class Order {
 
     private Instant createdAt;
 
+    @Version
+    private Long version;
+
     public Order(UUID customerId) {
         this.id = UUID.randomUUID();
         this.customerId = customerId;

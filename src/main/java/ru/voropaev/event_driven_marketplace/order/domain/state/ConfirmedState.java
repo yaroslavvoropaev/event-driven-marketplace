@@ -24,4 +24,9 @@ public class ConfirmedState implements OrderState {
     public OrderStatus startProcessing() {
         throw new InvalidOrderTransitionException(OrderStatus.CONFIRMED, "startProcessing");
     }
+
+    @Override
+    public OrderStatus cancelByCustomer() {
+        throw new InvalidOrderTransitionException(OrderStatus.CONFIRMED, "cancelByCustomer");
+    }
 }

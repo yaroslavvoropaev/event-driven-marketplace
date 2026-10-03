@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
+import ru.voropaev.event_driven_marketplace.order.repository.OrderRepository;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
 
@@ -42,6 +44,9 @@ public class OrderControllerIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private OrderRepository orderRepository;
 
 
     @Test
@@ -279,6 +284,24 @@ public class OrderControllerIntegrationTest {
 
         mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(jwtFor(customerId)))
                 .andExpect(status().isConflict());
+    }
+
+    /**
+     * Статус выставлен напрямую: тест транзакционный, AFTER_COMMIT-слушатели в нём не
+     * срабатывают, и сага сама до PENDING заказ не доведёт.
+     */
+    @Test
+    @Transactional
+    public void cancelOrder_returnsConflict_whenPending() throws Exception {
+        UUID customerId = UUID.randomUUID();
+        UUID orderId = createOrderAndGetId(customerId);
+        orderRepository.findById(orderId).orElseThrow().updateStatus(OrderStatus.PENDING);
+
+        mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(jwtFor(customerId)))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(get("/api/orders/{id}", orderId).with(jwtFor(customerId)))
+                .andExpect(jsonPath("$.orderStatus").value("PENDING"));
     }
 
     private static JwtRequestPostProcessor jwtFor(UUID customerId) {

@@ -24,4 +24,12 @@ public class CreatedState implements OrderState {
     public OrderStatus confirm() {
         throw new InvalidOrderTransitionException(OrderStatus.CREATED, "confirm");
     }
+
+
+    @Override
+    public OrderStatus cancelByCustomer() {
+        return OrderStatus.CANCELLED;
+    }
+
+
 }

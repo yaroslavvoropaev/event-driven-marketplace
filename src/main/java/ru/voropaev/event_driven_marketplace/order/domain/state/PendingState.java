@@ -25,4 +25,11 @@ public class PendingState implements OrderState {
     public OrderStatus startProcessing() {
         throw new InvalidOrderTransitionException(OrderStatus.PENDING, "startProcessing");
     }
+
+    @Override
+    public OrderStatus cancelByCustomer() {
+        throw new InvalidOrderTransitionException(OrderStatus.PENDING, "cancelByCustomer");
+    }
+
+
 }

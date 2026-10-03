@@ -46,8 +46,6 @@ public class OrderCreatedListener {
 
         applicationEventPublisher.publishEvent(new InventoryReserved(
                 event.orderId(),
-                event.customerId(),
-                event.totalAmount(),
                 Instant.now()
         ));
     }

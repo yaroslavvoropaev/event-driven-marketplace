@@ -1,13 +1,15 @@
-package ru.voropaev.event_driven_marketplace.payment.event;
+package ru.voropaev.event_driven_marketplace.payment.command;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
-import ru.voropaev.event_driven_marketplace.inventory.event.InventoryReserved;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import ru.voropaev.event_driven_marketplace.payment.domain.Payment;
 import ru.voropaev.event_driven_marketplace.payment.domain.state.PaymentStatus;
+import ru.voropaev.event_driven_marketplace.payment.event.PaymentCompleted;
+import ru.voropaev.event_driven_marketplace.payment.event.PaymentFailed;
 import ru.voropaev.event_driven_marketplace.payment.gateway.PaymentGateway;
 import ru.voropaev.event_driven_marketplace.payment.gateway.exception.PaymentDeclinedException;
 import ru.voropaev.event_driven_marketplace.payment.gateway.exception.PaymentGatewayUnavailableException;
@@ -15,23 +17,23 @@ import ru.voropaev.event_driven_marketplace.payment.service.PaymentService;
 
 import java.time.Instant;
 
+@Slf4j
 @Component
-public class InventoryReservedListener {
-    private static final Logger log = LoggerFactory.getLogger(InventoryReservedListener.class);
+public class ChargePaymentHandler {
     private final PaymentService paymentService;
     private final PaymentGateway paymentGateway;
     private final ApplicationEventPublisher applicationEventPublisher;
 
-    public InventoryReservedListener(PaymentService paymentService, PaymentGateway paymentGateway, ApplicationEventPublisher applicationEventPublisher) {
+    public ChargePaymentHandler(PaymentService paymentService, PaymentGateway paymentGateway, ApplicationEventPublisher applicationEventPublisher) {
         this.paymentService = paymentService;
         this.paymentGateway = paymentGateway;
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
 
-    @EventListener
-    public void on(InventoryReserved event) {
-        Payment payment = paymentService.createPending(event.orderId(), event.customerId(), event.totalAmount());
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void on(ChargePayment command){
+        Payment payment = paymentService.createPending(command.orderId(), command.customerId(), command.amount());
         if (payment.getPaymentStatus() != PaymentStatus.PENDING) {
             return;
         }
@@ -63,3 +65,4 @@ public class InventoryReservedListener {
         }
     }
 }
+

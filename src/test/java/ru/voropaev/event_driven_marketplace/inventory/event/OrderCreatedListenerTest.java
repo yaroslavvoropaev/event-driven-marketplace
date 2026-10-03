@@ -77,8 +77,6 @@ class OrderCreatedListenerTest {
 
         InventoryReserved published = captor.getValue();
         assertEquals(event.orderId(), published.orderId());
-        assertEquals(event.customerId(), published.customerId());
-        assertEquals(event.totalAmount(), published.totalAmount());
     }
 
     @Test

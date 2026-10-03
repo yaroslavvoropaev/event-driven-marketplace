@@ -17,6 +17,7 @@ import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
+import ru.voropaev.event_driven_marketplace.order.domain.state.exception.InvalidOrderTransitionException;
 import ru.voropaev.event_driven_marketplace.order.service.OrderService;
 import ru.voropaev.event_driven_marketplace.user.api.dto.RegisterRequest;
 import ru.voropaev.event_driven_marketplace.user.service.AuthService;
@@ -27,6 +28,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -122,21 +124,23 @@ class OrderNotificationIntegrationTest {
 
     /**
      * Зависшая сага (копейки 99) не шлёт ничего: заказ не дошёл до терминального статуса.
-     * Письмо появляется только после ручной отмены — и без обещаний про деньги.
+     * Отмена покупателем в PENDING отбивается, так что письма не появляется и после неё.
+     * <p>
+     * Сквозной путь «отмена покупателем → письмо» здесь недостижим: при синхронной саге
+     * заказ после createOrder никогда не бывает в CREATED. Текст письма проверяет
+     * {@code NotificationMessagesTest}; сквозную проверку вернуть, когда сага станет асинхронной.
      */
     @Test
-    void sendsNothingForStuckSaga_andNeutralTextAfterCustomerCancels() {
+    void sendsNothingForStuckSaga_evenAfterRejectedCustomerCancel() {
         UUID customerId = registeredCustomer();
         OrderResponse response = order(customerId, productPricedAt("10.99", 10), 1);
 
         assertTrue(notificationsOf(response.id()).isEmpty());
 
-        orderService.cancelOrder(response.id(), customerId);
+        assertThrows(InvalidOrderTransitionException.class,
+                () -> orderService.cancelOrder(response.id(), customerId));
 
-        List<Notification> notifications = notificationsOf(response.id());
-        assertEquals(1, notifications.size());
-        assertEquals(NotificationType.ORDER_CANCELLED, notifications.getFirst().getType());
-        assertTrue(notifications.getFirst().getBody().contains("по вашему запросу"));
+        assertTrue(notificationsOf(response.id()).isEmpty());
     }
 
     /**

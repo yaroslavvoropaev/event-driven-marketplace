@@ -5,4 +5,5 @@ public interface OrderState {
     OrderStatus confirm();
     OrderStatus cancel();
     OrderStatus startProcessing();
+    OrderStatus cancelByCustomer();
 }

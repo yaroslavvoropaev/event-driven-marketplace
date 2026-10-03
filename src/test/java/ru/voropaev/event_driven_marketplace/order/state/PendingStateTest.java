@@ -31,4 +31,14 @@ public class PendingStateTest {
         assertThrows(InvalidOrderTransitionException.class, state::startProcessing);
     }
 
+    /**
+     * В PENDING платёж может быть уже в пути: отмена покупателем привела бы к списанию
+     * за отменённый заказ, а возврата денег у нас нет. Отмена сагой ({@code cancel()})
+     * при этом разрешена — её вызывает сам исход платежа.
+     */
+    @Test
+    void cancelByCustomerIsNotAllowed() {
+        assertThrows(InvalidOrderTransitionException.class, state::cancelByCustomer);
+    }
+
 }
