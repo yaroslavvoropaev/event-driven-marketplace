@@ -24,29 +24,5 @@ public class OrderCreatedListener {
         this.retrier = retrier;
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void on(OrderCreated event) {
-        try {
-            retrier.runWithRetry(() -> inventoryService.reserveForOrder(event));
-        } catch (ObjectOptimisticLockingFailureException exception) {
-            applicationEventPublisher.publishEvent(new InventoryReservationFailed(
-                    event.orderId(),
-                    "Concurrent modification while reserving stock, retries exhausted",
-                    Instant.now()
-            ));
-            return;
-        } catch (ReservationFailedException exception) {
-            applicationEventPublisher.publishEvent(new InventoryReservationFailed(
-                    event.orderId(),
-                    exception.getMessage(),
-                    Instant.now()
-            ));
-            return;
-        }
 
-        applicationEventPublisher.publishEvent(new InventoryReserved(
-                event.orderId(),
-                Instant.now()
-        ));
-    }
 }
