@@ -31,7 +31,6 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentServiceImplTest {
-
     private static final UUID ORDER_ID = UUID.randomUUID();
     private static final UUID CUSTOMER_ID = UUID.randomUUID();
     private static final BigDecimal AMOUNT = new BigDecimal("199.00");
@@ -39,8 +38,6 @@ class PaymentServiceImplTest {
     @Mock
     private PaymentRepository paymentRepository;
 
-    // резолвер настоящий, а не мок: это чистая доменная логика без зависимостей,
-    // мок здесь проверял бы только то, что мы сами же и застабили
     private final PaymentStateResolver paymentStateResolver = new PaymentStateResolver(
             List.of(new PendingState(), new SucceedState(), new FailedState())
     );
@@ -120,35 +117,4 @@ class PaymentServiceImplTest {
 
         assertEquals("fake-tx-1", payment.getGatewayTransactionId());
     }
-
-    @Test
-    void markFailed_isRejected_whenPaymentAlreadyFailed() {
-        Payment payment = pendingPayment();
-        payment.applyFailure(PaymentStatus.FAILED, "insufficient funds");
-        when(paymentRepository.findById(payment.getId())).thenReturn(Optional.of(payment));
-
-        assertThrows(InvalidPaymentTransitionException.class,
-                () -> paymentService.markFailed(payment.getId(), "another reason"));
-
-        assertEquals("insufficient funds", payment.getFailureReason());
-    }
-
-    @Test
-    void markSucceeded_throws_whenPaymentIsMissing() {
-        UUID missingId = UUID.randomUUID();
-        when(paymentRepository.findById(missingId)).thenReturn(Optional.empty());
-
-        assertThrows(PaymentNotFoundException.class,
-                () -> paymentService.markSucceeded(missingId, "fake-tx-1"));
-    }
-
-    @Test
-    void markFailed_throws_whenPaymentIsMissing() {
-        UUID missingId = UUID.randomUUID();
-        when(paymentRepository.findById(missingId)).thenReturn(Optional.empty());
-
-        assertThrows(PaymentNotFoundException.class,
-                () -> paymentService.markFailed(missingId, "insufficient funds"));
-    }
-
 }

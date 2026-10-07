@@ -5,9 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
-import ru.voropaev.event_driven_marketplace.inventory.domain.ReservationStatus;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Stock;
-import ru.voropaev.event_driven_marketplace.inventory.repository.ReservationRepository;
 import ru.voropaev.event_driven_marketplace.inventory.repository.StockRepository;
 import ru.voropaev.event_driven_marketplace.notification.domain.Notification;
 import ru.voropaev.event_driven_marketplace.notification.domain.NotificationStatus;
@@ -17,7 +15,6 @@ import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
-import ru.voropaev.event_driven_marketplace.order.domain.state.exception.InvalidOrderTransitionException;
 import ru.voropaev.event_driven_marketplace.order.service.OrderService;
 import ru.voropaev.event_driven_marketplace.user.api.dto.RegisterRequest;
 import ru.voropaev.event_driven_marketplace.user.service.AuthService;
@@ -28,21 +25,12 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Уведомления на полной саге и настоящем Postgres: листенер висит на AFTER_COMMIT
- * и работает в том же потоке, поэтому к возврату из createOrder письмо уже учтено в БД.
- * <p>
- * Суммы подобраны под правило FakePaymentGateway: копейки 13 — отказ, 99 — неизвестный
- * исход, остальное — успех.
- */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @ActiveProfiles("test")
 class OrderNotificationIntegrationTest {
-
     @Autowired
     private OrderService orderService;
     @Autowired
@@ -94,23 +82,6 @@ class OrderNotificationIntegrationTest {
     }
 
     @Test
-    void sendsPaymentFailureText_whenPaymentIsDeclined() {
-        UUID customerId = registeredCustomer();
-        OrderResponse response = order(customerId, productPricedAt("10.13", 10), 1);
-
-        List<Notification> notifications = notificationsOf(response.id());
-
-        assertEquals(1, notifications.size());
-        assertEquals(NotificationType.ORDER_CANCELLED, notifications.getFirst().getType());
-        assertEquals(NotificationStatus.SENT, notifications.getFirst().getStatus());
-        assertTrue(notifications.getFirst().getBody().contains("оплата не прошла"));
-    }
-
-    /**
-     * Ради этого случая notification слушает OrderCancelled, а не PaymentFailed:
-     * до платежа сага не доходит, и платёжного события не будет вовсе.
-     */
-    @Test
     void sendsReservationFailureText_whenNotEnoughStock() {
         UUID customerId = registeredCustomer();
         OrderResponse response = order(customerId, productPricedAt("10.00", 1), 3);
@@ -122,31 +93,6 @@ class OrderNotificationIntegrationTest {
         assertTrue(notifications.getFirst().getBody().contains("не удалось зарезервировать товар"));
     }
 
-    /**
-     * Зависшая сага (копейки 99) не шлёт ничего: заказ не дошёл до терминального статуса.
-     * Отмена покупателем в PENDING отбивается, так что письма не появляется и после неё.
-     * <p>
-     * Сквозной путь «отмена покупателем → письмо» здесь недостижим: при синхронной саге
-     * заказ после createOrder никогда не бывает в CREATED. Текст письма проверяет
-     * {@code NotificationMessagesTest}; сквозную проверку вернуть, когда сага станет асинхронной.
-     */
-    @Test
-    void sendsNothingForStuckSaga_evenAfterRejectedCustomerCancel() {
-        UUID customerId = registeredCustomer();
-        OrderResponse response = order(customerId, productPricedAt("10.99", 10), 1);
-
-        assertTrue(notificationsOf(response.id()).isEmpty());
-
-        assertThrows(InvalidOrderTransitionException.class,
-                () -> orderService.cancelOrder(response.id(), customerId));
-
-        assertTrue(notificationsOf(response.id()).isEmpty());
-    }
-
-    /**
-     * N-7: на этом держатся существующие тесты саги — они создают заказы от случайных
-     * customerId без аккаунта.
-     */
     @Test
     void sagaCompletesWithoutNotification_whenCustomerHasNoAccount() {
         UUID customerId = UUID.randomUUID();

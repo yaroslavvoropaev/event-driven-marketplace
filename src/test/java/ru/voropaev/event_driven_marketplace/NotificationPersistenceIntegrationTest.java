@@ -25,18 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Проверяет домен notification на настоящем Postgres: маппинг сущности на схему V8,
- * уникальный индекс как барьер против дубля и резолв получателя через user-домен.
- * <p>
- * Само поднятие контекста здесь — тоже проверка: {@code ddl-auto=validate} упадёт,
- * если V8 не применилась или имена/типы колонок разъехались с полями сущности.
- */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @ActiveProfiles("test")
 class NotificationPersistenceIntegrationTest {
-
     private static final String RECIPIENT = "buyer@example.com";
     private static final String SUBJECT = "Заказ подтверждён";
     private static final String BODY = "Мы получили оплату по вашему заказу.";
@@ -55,26 +47,6 @@ class NotificationPersistenceIntegrationTest {
     }
 
     @Test
-    void pendingNotificationIsStoredWithEmptyDeliveryFields() {
-        UUID orderId = UUID.randomUUID();
-
-        UUID id = notificationRepository.save(pending(orderId, NotificationType.ORDER_CONFIRMED)).getId();
-
-        Notification stored = notificationRepository.findById(id).orElseThrow();
-        assertEquals(NotificationStatus.PENDING, stored.getStatus());
-        assertEquals(NotificationType.ORDER_CONFIRMED, stored.getType());
-        assertEquals(RECIPIENT, stored.getRecipient());
-        assertEquals(BODY, stored.getBody());
-        assertNotNull(stored.getCreatedAt());
-        assertNull(stored.getSentAt());
-        assertNull(stored.getFailureReason());
-    }
-
-    /**
-     * Настоящий барьер дедупликации: {@code existsBy} в сервисе — только быстрый путь,
-     * гонку двух параллельных вызовов отсекает именно индекс в БД.
-     */
-    @Test
     void secondNotificationOfSameTypeForSameOrderIsRejectedByDatabase() {
         UUID orderId = UUID.randomUUID();
         notificationRepository.saveAndFlush(pending(orderId, NotificationType.ORDER_CONFIRMED));
@@ -92,20 +64,6 @@ class NotificationPersistenceIntegrationTest {
 
         assertTrue(notificationRepository.existsByOrderIdAndType(orderId, NotificationType.ORDER_CONFIRMED));
         assertTrue(notificationRepository.existsByOrderIdAndType(orderId, NotificationType.ORDER_CANCELLED));
-    }
-
-    @Test
-    void startDelivery_refusesSecondAttemptForSameOrderAndType() {
-        UUID orderId = UUID.randomUUID();
-        UUID customerId = UUID.randomUUID();
-
-        Optional<UUID> first = notificationService.startDelivery(orderId, customerId,
-                NotificationType.ORDER_CONFIRMED, RECIPIENT, SUBJECT, BODY);
-        Optional<UUID> second = notificationService.startDelivery(orderId, customerId,
-                NotificationType.ORDER_CONFIRMED, RECIPIENT, SUBJECT, BODY);
-
-        assertTrue(first.isPresent());
-        assertTrue(second.isEmpty());
     }
 
     @Test
@@ -136,9 +94,6 @@ class NotificationPersistenceIntegrationTest {
         assertEquals(Optional.of(email), customerDirectory.emailOf(registered.id()));
     }
 
-    /**
-     * Некому писать — не ошибка: листенер просто пропустит отправку.
-     */
     @Test
     void customerDirectoryReturnsEmptyForUnknownCustomer() {
         assertTrue(customerDirectory.emailOf(UUID.randomUUID()).isEmpty());

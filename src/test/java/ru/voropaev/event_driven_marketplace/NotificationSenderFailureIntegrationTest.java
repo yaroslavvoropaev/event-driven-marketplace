@@ -34,21 +34,10 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 
-/**
- * Изоляция уведомлений от саги (N-5, N-6) на настоящей БД.
- * <p>
- * Сендер подменён моком: правило «без моков в интеграционных тестах» касается БД и
- * брокера, а сендер — внешний канал, который и в проде стоит за интерфейсом.
- * Отдельный класс, потому что подмена бина порождает отдельный Spring-контекст.
- * <p>
- * На OrderConfirmed подписаны и notification, и inventory, порядок вызова не определён.
- * Проверка подтверждённого резерва ловит обрыв рассылки при любом порядке.
- */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @ActiveProfiles("test")
 class NotificationSenderFailureIntegrationTest {
-
     @MockitoBean
     private NotificationSender notificationSender;
 

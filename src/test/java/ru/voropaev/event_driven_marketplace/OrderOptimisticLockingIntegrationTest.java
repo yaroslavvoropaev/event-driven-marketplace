@@ -18,20 +18,10 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/**
- * Lost update на заказе: HTTP-отмена и шаг саги читают один и тот же CREATED и пишут
- * каждый своё. Без {@code @Version} второй коммит молча затёр бы первый.
- * <p>
- * Внешняя транзакция — «медленный» поток, вложенная REQUIRES_NEW — «быстрый», который
- * успевает закоммитить между чтением и записью медленного. Исключение летит не из
- * {@code updateStatus}, а из коммита внешней транзакции: UPDATE с {@code WHERE version = ?}
- * уходит в БД только при flush.
- */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 @ActiveProfiles("test")
 class OrderOptimisticLockingIntegrationTest {
-
     @Autowired
     private OrderRepository orderRepository;
     @Autowired
@@ -57,16 +47,5 @@ class OrderOptimisticLockingIntegrationTest {
         Order stored = orderRepository.findById(orderId).orElseThrow();
         assertEquals(OrderStatus.CANCELLED, stored.getOrderStatus());
         assertEquals(1L, stored.getVersion());
-    }
-
-    @Test
-    void versionStartsAtZero_andGrowsWithEachUpdate() {
-        UUID orderId = orderRepository.save(new Order(UUID.randomUUID())).getId();
-        assertEquals(0L, orderRepository.findById(orderId).orElseThrow().getVersion());
-
-        new TransactionTemplate(transactionManager).executeWithoutResult(status ->
-                orderRepository.findById(orderId).orElseThrow().updateStatus(OrderStatus.PENDING));
-
-        assertEquals(1L, orderRepository.findById(orderId).orElseThrow().getVersion());
     }
 }

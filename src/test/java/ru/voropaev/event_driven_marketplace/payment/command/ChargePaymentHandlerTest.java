@@ -31,7 +31,6 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ChargePaymentHandlerTest {
-
     private static final UUID ORDER_ID = UUID.randomUUID();
     private static final UUID CUSTOMER_ID = UUID.randomUUID();
     private static final BigDecimal AMOUNT = new BigDecimal("199.00");
@@ -97,11 +96,6 @@ class ChargePaymentHandlerTest {
         assertEquals("insufficient funds", published.reason());
     }
 
-    /**
-     * Исход неизвестен: деньги могли быть списаны. Ни одно решение о судьбе заказа
-     * принимать нельзя, поэтому платёж остаётся PENDING и сага честно висит до
-     * реконсиляции. Тест фиксирует именно бездействие.
-     */
     @Test
     void leavesPaymentPending_whenGatewayOutcomeIsUnknown() {
         Payment payment = pendingPayment();
@@ -117,10 +111,6 @@ class ChargePaymentHandlerTest {
         assertEquals(PaymentStatus.PENDING, payment.getPaymentStatus());
     }
 
-    /**
-     * Повторная команда по уже оплаченному заказу не списывает второй раз: createPending
-     * возвращает существующий платёж, и его статус останавливает обработку.
-     */
     @Test
     void doesNotChargeTwice_whenPaymentIsAlreadyCompleted() {
         Payment payment = pendingPayment();
@@ -134,5 +124,4 @@ class ChargePaymentHandlerTest {
         verify(paymentService, never()).markSucceeded(any(), anyString());
         verify(paymentService, never()).markFailed(eq(payment.getId()), anyString());
     }
-
 }

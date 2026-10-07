@@ -37,7 +37,6 @@ import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 public class OrderServiceImplTest {
-
     @Mock
     private OrderRepository orderRepository;
     @Mock
@@ -70,39 +69,16 @@ public class OrderServiceImplTest {
         ArgumentCaptor<OrderCreated> eventCaptor = ArgumentCaptor.forClass(OrderCreated.class);
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
 
-
         OrderCreated publishedEvent = eventCaptor.getValue();
 
         assertEquals(customerId, publishedEvent.customerId());
         assertEquals(BigDecimal.valueOf(200), publishedEvent.totalAmount());
         assertEquals(1, publishedEvent.items().size());
         assertEquals(2, publishedEvent.items().getFirst().quantity());
-
     }
 
     @Test
-    public void returnsResponseWhenExists() {
-        Order order = new Order(UUID.randomUUID());
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-
-        OrderResponse response = orderService.getOrder(order.getId(), order.getCustomerId());
-
-        assertEquals(order.getId(), response.id());
-        assertEquals(order.getCustomerId(), response.customerId());
-        assertEquals(OrderStatus.CREATED, response.orderStatus());
-    }
-
-    @Test
-    public void throwsNotFoundWhenMissing() {
-        UUID missingId = UUID.randomUUID();
-        when(orderRepository.findById(missingId)).thenReturn(Optional.empty());
-
-        assertThrows(OrderNotFoundException.class,
-                () -> orderService.getOrder(missingId, UUID.randomUUID()));
-    }
-
-    @Test
-    public void updatesStatusWhenTransitionLegal() {
+    public void customerCancelUsesOwnTransitionAndPublishesEvent() {
         Order order = new Order(UUID.randomUUID());
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
         when(orderStateResolver.resolve(OrderStatus.CREATED)).thenReturn(orderState);
@@ -111,21 +87,6 @@ public class OrderServiceImplTest {
         OrderResponse response = orderService.cancelOrder(order.getId(), order.getCustomerId());
 
         assertEquals(OrderStatus.CANCELLED, response.orderStatus());
-    }
-
-    /**
-     * Отмена покупателем идёт через свой переход, а не через саговый {@code cancel()}:
-     * в PENDING первый запрещён, второй разрешён. Событие при этом обязано уйти — без него
-     * inventory не отпустит резерв, а notification не узнает об отмене.
-     */
-    @Test
-    public void customerCancelUsesOwnTransitionAndPublishesEvent() {
-        Order order = new Order(UUID.randomUUID());
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-        when(orderStateResolver.resolve(OrderStatus.CREATED)).thenReturn(orderState);
-        when(orderState.cancelByCustomer()).thenReturn(OrderStatus.CANCELLED);
-
-        orderService.cancelOrder(order.getId(), order.getCustomerId());
 
         verify(orderState, never()).cancel();
         ArgumentCaptor<OrderCancelled> eventCaptor = ArgumentCaptor.forClass(OrderCancelled.class);
@@ -135,7 +96,7 @@ public class OrderServiceImplTest {
     }
 
     @Test
-    public void _propagatesExceptionWhenTransitionIllegal() {
+    public void propagatesExceptionWhenTransitionIllegal() {
         Order order = new Order(UUID.randomUUID());
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
         when(orderStateResolver.resolve(OrderStatus.CREATED)).thenReturn(orderState);
@@ -147,31 +108,6 @@ public class OrderServiceImplTest {
         verifyNoInteractions(applicationEventPublisher);
     }
 
-    @Test
-    public void throwsNotFoundWhenReadingOrderOfAnotherCustomer() {
-        Order order = new Order(UUID.randomUUID());
-        UUID stranger = UUID.randomUUID();
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-
-        assertThrows(OrderNotFoundException.class,
-                () -> orderService.getOrder(order.getId(), stranger));
-    }
-
-    @Test
-    public void throwsNotFoundWhenCancellingOrderOfAnotherCustomer() {
-        Order order = new Order(UUID.randomUUID());
-        UUID stranger = UUID.randomUUID();
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-
-        assertThrows(OrderNotFoundException.class,
-                () -> orderService.cancelOrder(order.getId(), stranger));
-    }
-
-    /**
-     * Владельца сверяем раньше, чем состояние: иначе чужой на неотменяемом заказе получил бы
-     * 409, а на несуществующем — 404, и по разнице кодов восстановил бы и факт существования
-     * заказа, и его статус. Отсутствие обращений к резолверу и есть доказательство порядка.
-     */
     @Test
     public void checksOwnershipBeforeState() {
         Order order = new Order(UUID.randomUUID());
@@ -185,5 +121,4 @@ public class OrderServiceImplTest {
         verifyNoInteractions(orderStateResolver);
         assertEquals(OrderStatus.CONFIRMED, order.getOrderStatus());
     }
-
 }

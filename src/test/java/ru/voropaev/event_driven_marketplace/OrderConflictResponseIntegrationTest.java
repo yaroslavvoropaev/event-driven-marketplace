@@ -23,29 +23,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * Настоящий конфликт версий через HTTP не воспроизвести детерминированно — нужен второй
- * писатель ровно между чтением и коммитом. Сам конфликт на живой БД проверяет
- * {@link OrderOptimisticLockingIntegrationTest}; здесь — только его перевод в ответ.
- * Сервис подменён, БД не мокается. Отдельный класс, потому что подмена бина порождает
- * отдельный Spring-контекст.
- */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 @ActiveProfiles("test")
 class OrderConflictResponseIntegrationTest {
-
     @MockitoBean
     private OrderService orderService;
 
     @Autowired
     private MockMvc mockMvc;
 
-    /**
-     * Сообщение Hibernate содержит FQCN сущности и её id — клиенту это ни к чему,
-     * а о внутреннем устройстве рассказывает.
-     */
     @Test
     void cancelOrder_returnsConflictWithoutInternals_whenOrderModifiedConcurrently() throws Exception {
         UUID customerId = UUID.randomUUID();

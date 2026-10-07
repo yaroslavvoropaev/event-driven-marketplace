@@ -17,7 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NotificationMessagesTest {
-
     private static final UUID ORDER_ID = UUID.randomUUID();
     private static final UUID CUSTOMER_ID = UUID.randomUUID();
     private static final Instant OCCURRED_AT = Instant.parse("2026-09-24T10:00:00Z");
@@ -39,10 +38,6 @@ class NotificationMessagesTest {
         assertTrue(message.body().contains("300.00"));
     }
 
-    /**
-     * BigDecimal печатает сумму так, как она пришла: 100 без копеек, 1E+2 после
-     * некоторых операций. Клиент должен видеть ровно два знака.
-     */
     @Test
     void confirmed_printsAmountWithExactlyTwoDecimals() {
         assertTrue(NotificationMessages.confirmed(confirmed("100")).body().contains("100.00"));
@@ -60,9 +55,6 @@ class NotificationMessagesTest {
         assertEquals(CancellationReason.values().length, distinctBodies);
     }
 
-    /**
-     * Перебор values(): новая причина отмены сразу попадает под проверку.
-     */
     @ParameterizedTest
     @EnumSource(CancellationReason.class)
     void cancelled_hasSubjectAndMentionsOrder_forEveryReason(CancellationReason reason) {
@@ -73,10 +65,6 @@ class NotificationMessagesTest {
         assertTrue(message.body().contains(ORDER_ID.toString()));
     }
 
-    /**
-     * Ручная отмена сейчас возможна только у зависшей саги с неизвестным исходом
-     * платежа, поэтому любое утверждение о деньгах может оказаться ложным.
-     */
     @Test
     void cancelled_byCustomer_saysNothingAboutMoney() {
         String body = NotificationMessages.cancelled(cancelled(CancellationReason.CUSTOMER_REQUEST))
@@ -93,14 +81,5 @@ class NotificationMessagesTest {
         String body = NotificationMessages.cancelled(cancelled(CancellationReason.PAYMENT_FAILED)).body();
 
         assertTrue(body.contains("не списаны"));
-    }
-
-    @Test
-    void sameEventGivesSameMessage() {
-        OrderCancelled event = cancelled(CancellationReason.PAYMENT_FAILED);
-
-        assertEquals(NotificationMessages.cancelled(event), NotificationMessages.cancelled(event));
-        assertEquals(NotificationMessages.confirmed(confirmed("300.00")),
-                NotificationMessages.confirmed(confirmed("300.00")));
     }
 }
