@@ -1,8 +1,6 @@
 package ru.voropaev.event_driven_marketplace.inventory.command;
 
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
@@ -10,13 +8,9 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import ru.voropaev.event_driven_marketplace.common.retry.OptimisticLockRetrier;
 import ru.voropaev.event_driven_marketplace.inventory.domain.exception.ReservationFailedException;
-import ru.voropaev.event_driven_marketplace.inventory.event.InventoryOrderListener;
 import ru.voropaev.event_driven_marketplace.inventory.event.InventoryReservationFailed;
 import ru.voropaev.event_driven_marketplace.inventory.event.InventoryReserved;
 import ru.voropaev.event_driven_marketplace.inventory.service.InventoryService;
-import ru.voropaev.event_driven_marketplace.order.event.OrderCancelled;
-import ru.voropaev.event_driven_marketplace.order.event.OrderConfirmed;
-import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 
 import java.time.Instant;
 
@@ -35,7 +29,7 @@ public class InventoryCommandHandler {
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void on(OrderConfirmed event) {
+    public void on(ConfirmReservation event) {
         try {
             retrier.runWithRetry(() -> inventoryService.confirmReservations(event.orderId()));
         } catch (ObjectOptimisticLockingFailureException exception) {
@@ -44,7 +38,7 @@ public class InventoryCommandHandler {
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void on(OrderCancelled event) {
+    public void on(ReleaseInventory event) {
         try {
             retrier.runWithRetry(() -> inventoryService.releaseReservations(event.orderId()));
         } catch (ObjectOptimisticLockingFailureException exception) {
@@ -54,7 +48,7 @@ public class InventoryCommandHandler {
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void on(OrderCreated event) {
+    public void on(ReserveInventory event) {
         try {
             retrier.runWithRetry(() -> inventoryService.reserveForOrder(event));
         } catch (ObjectOptimisticLockingFailureException exception) {

@@ -7,6 +7,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import ru.voropaev.event_driven_marketplace.inventory.command.ConfirmReservation;
+import ru.voropaev.event_driven_marketplace.inventory.command.ReleaseInventory;
+import ru.voropaev.event_driven_marketplace.inventory.command.ReserveInventory;
 import ru.voropaev.event_driven_marketplace.inventory.event.InventoryReservationFailed;
 import ru.voropaev.event_driven_marketplace.inventory.event.InventoryReserved;
 import ru.voropaev.event_driven_marketplace.order.domain.Order;
@@ -17,6 +20,7 @@ import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
 import ru.voropaev.event_driven_marketplace.order.event.CancellationReason;
 import ru.voropaev.event_driven_marketplace.order.event.OrderCancelled;
 import ru.voropaev.event_driven_marketplace.order.event.OrderConfirmed;
+import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 import ru.voropaev.event_driven_marketplace.order.repository.OrderRepository;
 import ru.voropaev.event_driven_marketplace.order.service.exception.OrderNotFoundException;
 import ru.voropaev.event_driven_marketplace.payment.command.ChargePayment;
@@ -25,11 +29,14 @@ import ru.voropaev.event_driven_marketplace.payment.event.PaymentFailed;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -63,10 +70,42 @@ class OrderSagaOrchestratorTest {
         return order;
     }
 
-    private <T> T published(Class<T> type) {
+    private List<Object> allPublished() {
         ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
-        verify(applicationEventPublisher).publishEvent(captor.capture());
-        return type.cast(captor.getValue());
+        verify(applicationEventPublisher, atLeastOnce()).publishEvent(captor.capture());
+        return captor.getAllValues();
+    }
+
+    /** Ровно одно сообщение данного типа среди всего, что оркестратор отправил. */
+    private <T> T published(Class<T> type) {
+        List<T> matching = allPublished().stream().filter(type::isInstance).map(type::cast).toList();
+        assertEquals(1, matching.size(), "expected exactly one " + type.getSimpleName());
+        return matching.getFirst();
+    }
+
+    private boolean nothingPublishedOf(Class<?> type) {
+        return allPublished().stream().noneMatch(type::isInstance);
+    }
+
+    /**
+     * Старт саги: заказ только что создан и ждёт резерва — это и есть CREATED, менять статус
+     * нечего. Позиции берутся из события: заказ в этот момент ещё не закоммичен.
+     */
+    @Test
+    void commandsReservation_withoutTouchingOrderStatus_whenOrderCreated() {
+        UUID orderId = UUID.randomUUID();
+        UUID productId = UUID.randomUUID();
+        OrderCreated event = new OrderCreated(
+                orderId, UUID.randomUUID(), new BigDecimal("100.00"),
+                List.of(new OrderCreated.OrderItemPayload(productId, 2)),
+                Instant.now());
+
+        orchestrator.on(event);
+
+        verifyNoInteractions(orderStateResolver);
+        ReserveInventory command = published(ReserveInventory.class);
+        assertEquals(orderId, command.orderId());
+        assertEquals(List.of(new ReserveInventory.Item(productId, 2)), command.items());
     }
 
     /**
@@ -98,10 +137,12 @@ class OrderSagaOrchestratorTest {
         OrderCancelled event = published(OrderCancelled.class);
         assertEquals(order.getId(), event.orderId());
         assertEquals(CancellationReason.RESERVATION_FAILED, event.reason());
+        // резервирование всё-или-ничего: раз не удалось, отпускать нечего
+        assertTrue(nothingPublishedOf(ReleaseInventory.class));
     }
 
     @Test
-    void confirms_whenPaymentCompleted() {
+    void confirmsAndCommandsReservationConfirm_whenPaymentCompleted() {
         Order order = orderIn(OrderStatus.PENDING);
         when(orderState.confirm()).thenReturn(OrderStatus.CONFIRMED);
 
@@ -113,6 +154,7 @@ class OrderSagaOrchestratorTest {
         OrderConfirmed event = published(OrderConfirmed.class);
         assertEquals(order.getId(), event.orderId());
         assertEquals(order.getCustomerId(), event.customerId());
+        assertEquals(order.getId(), published(ConfirmReservation.class).orderId());
     }
 
     /**
@@ -121,7 +163,7 @@ class OrderSagaOrchestratorTest {
      * CONFIRMED.
      */
     @Test
-    void cancelsWithPaymentReason_andNeverConfirms_whenPaymentFailed() {
+    void cancelsCommandsRelease_andNeverConfirms_whenPaymentFailed() {
         Order order = orderIn(OrderStatus.PENDING);
         when(orderState.cancel()).thenReturn(OrderStatus.CANCELLED);
 
@@ -133,6 +175,8 @@ class OrderSagaOrchestratorTest {
         assertEquals(OrderStatus.CANCELLED, order.getOrderStatus());
         OrderCancelled event = published(OrderCancelled.class);
         assertEquals(CancellationReason.PAYMENT_FAILED, event.reason());
+        // компенсация: товар уже зарезервирован под заказ, его надо вернуть на полку
+        assertEquals(order.getId(), published(ReleaseInventory.class).orderId());
     }
 
     /**

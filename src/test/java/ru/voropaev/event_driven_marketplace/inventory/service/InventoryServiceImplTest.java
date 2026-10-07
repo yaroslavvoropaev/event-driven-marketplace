@@ -6,6 +6,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import ru.voropaev.event_driven_marketplace.inventory.command.ReserveInventory;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Reservation;
 import ru.voropaev.event_driven_marketplace.inventory.domain.ReservationStatus;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Stock;
@@ -13,7 +14,6 @@ import ru.voropaev.event_driven_marketplace.inventory.domain.exception.Insuffici
 import ru.voropaev.event_driven_marketplace.inventory.domain.exception.StockNotFoundException;
 import ru.voropaev.event_driven_marketplace.inventory.repository.ReservationRepository;
 import ru.voropaev.event_driven_marketplace.inventory.repository.StockRepository;
-import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -48,13 +48,13 @@ class InventoryServiceImplTest {
         Stock stock = new Stock(productId, BigDecimal.TEN, 10, 0);
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
 
-        OrderCreated event = new OrderCreated(
-                orderId, UUID.randomUUID(), BigDecimal.valueOf(300),
-                List.of(new OrderCreated.OrderItemPayload(productId, 3)),
+        ReserveInventory command = new ReserveInventory(
+                orderId,
+                List.of(new ReserveInventory.Item(productId, 3)),
                 Instant.now()
         );
 
-        inventoryService.reserveForOrder(event);
+        inventoryService.reserveForOrder(command);
 
         assertEquals(7, stock.getAvailableQuantity());
         assertEquals(3, stock.getReservedQuantity());
@@ -75,13 +75,13 @@ class InventoryServiceImplTest {
         Stock stock = new Stock(productId, BigDecimal.TEN, 1, 0);
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
 
-        OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(300),
-                List.of(new OrderCreated.OrderItemPayload(productId, 3)),
+        ReserveInventory command = new ReserveInventory(
+                UUID.randomUUID(),
+                List.of(new ReserveInventory.Item(productId, 3)),
                 Instant.now()
         );
 
-        assertThrows(InsufficientStockException.class, () -> inventoryService.reserveForOrder(event));
+        assertThrows(InsufficientStockException.class, () -> inventoryService.reserveForOrder(command));
         verify(reservationRepository, never()).save(any());
     }
 
@@ -90,13 +90,13 @@ class InventoryServiceImplTest {
         UUID productId = UUID.randomUUID();
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.empty());
 
-        OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(300),
-                List.of(new OrderCreated.OrderItemPayload(productId, 1)),
+        ReserveInventory command = new ReserveInventory(
+                UUID.randomUUID(),
+                List.of(new ReserveInventory.Item(productId, 1)),
                 Instant.now()
         );
 
-        assertThrows(StockNotFoundException.class, () -> inventoryService.reserveForOrder(event));
+        assertThrows(StockNotFoundException.class, () -> inventoryService.reserveForOrder(command));
         verify(reservationRepository, never()).save(any());
     }
 
@@ -109,16 +109,16 @@ class InventoryServiceImplTest {
         when(stockRepository.findByProductId(productA)).thenReturn(Optional.of(stockA));
         when(stockRepository.findByProductId(productB)).thenReturn(Optional.of(stockB));
 
-        OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(300),
+        ReserveInventory command = new ReserveInventory(
+                UUID.randomUUID(),
                 List.of(
-                        new OrderCreated.OrderItemPayload(productA, 2),
-                        new OrderCreated.OrderItemPayload(productB, 5)
+                        new ReserveInventory.Item(productA, 2),
+                        new ReserveInventory.Item(productB, 5)
                 ),
                 Instant.now()
         );
 
-        assertThrows(InsufficientStockException.class, () -> inventoryService.reserveForOrder(event));
+        assertThrows(InsufficientStockException.class, () -> inventoryService.reserveForOrder(command));
 
         // productA успел примениться в памяти до того, как упала вторая позиция —
         // здесь это видно (мок не откатывает состояние), но реальный откат в БД

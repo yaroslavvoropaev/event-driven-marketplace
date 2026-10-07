@@ -6,6 +6,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import ru.voropaev.event_driven_marketplace.inventory.command.ConfirmReservation;
+import ru.voropaev.event_driven_marketplace.inventory.command.ReleaseInventory;
+import ru.voropaev.event_driven_marketplace.inventory.command.ReserveInventory;
 import ru.voropaev.event_driven_marketplace.inventory.event.InventoryReservationFailed;
 import ru.voropaev.event_driven_marketplace.inventory.event.InventoryReserved;
 import ru.voropaev.event_driven_marketplace.order.domain.Order;
@@ -13,6 +16,7 @@ import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStateResolve
 import ru.voropaev.event_driven_marketplace.order.event.CancellationReason;
 import ru.voropaev.event_driven_marketplace.order.event.OrderCancelled;
 import ru.voropaev.event_driven_marketplace.order.event.OrderConfirmed;
+import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 import ru.voropaev.event_driven_marketplace.order.repository.OrderRepository;
 import ru.voropaev.event_driven_marketplace.order.service.exception.OrderNotFoundException;
 import ru.voropaev.event_driven_marketplace.payment.command.ChargePayment;
@@ -88,8 +92,14 @@ public class OrderSagaOrchestrator {
                         Instant.now()
                 )
         );
-    }
 
+        applicationEventPublisher.publishEvent(
+                new ConfirmReservation(
+                        order.getId(),
+                        Instant.now()
+                )
+        );
+    }
 
 
     @EventListener
@@ -109,7 +119,25 @@ public class OrderSagaOrchestrator {
                         Instant.now()
                 )
         );
+
+        applicationEventPublisher.publishEvent(
+                new ReleaseInventory(
+                        order.getId(),
+                        Instant.now()
+                )
+        );
     }
+
+    @EventListener
+    public void on(OrderCreated event) {
+        applicationEventPublisher.publishEvent(
+                new ReserveInventory(
+                        event.orderId(),
+                        event.items().stream().map(item -> new ReserveInventory.Item(item.productId(), item.quantity())).toList(),
+                        Instant.now())
+        );
+    }
+
 
     private Order loadOrder(UUID orderId) {
         return orderRepository.findById(orderId).orElseThrow(
