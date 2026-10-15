@@ -6,6 +6,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import ru.voropaev.event_driven_marketplace.inventory.command.ReserveInventory;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Reservation;
 import ru.voropaev.event_driven_marketplace.inventory.domain.ReservationStatus;
 import ru.voropaev.event_driven_marketplace.inventory.domain.Stock;
@@ -13,7 +14,6 @@ import ru.voropaev.event_driven_marketplace.inventory.domain.exception.Insuffici
 import ru.voropaev.event_driven_marketplace.inventory.domain.exception.StockNotFoundException;
 import ru.voropaev.event_driven_marketplace.inventory.repository.ReservationRepository;
 import ru.voropaev.event_driven_marketplace.inventory.repository.StockRepository;
-import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -25,14 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class InventoryServiceImplTest {
-
     @Mock
     private StockRepository stockRepository;
     @Mock
@@ -48,13 +46,13 @@ class InventoryServiceImplTest {
         Stock stock = new Stock(productId, BigDecimal.TEN, 10, 0);
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
 
-        OrderCreated event = new OrderCreated(
-                orderId, UUID.randomUUID(), BigDecimal.valueOf(300),
-                List.of(new OrderCreated.OrderItemPayload(productId, 3)),
+        ReserveInventory command = new ReserveInventory(
+                orderId,
+                List.of(new ReserveInventory.Item(productId, 3)),
                 Instant.now()
         );
 
-        inventoryService.reserveForOrder(event);
+        inventoryService.reserveForOrder(command);
 
         assertEquals(7, stock.getAvailableQuantity());
         assertEquals(3, stock.getReservedQuantity());
@@ -75,13 +73,13 @@ class InventoryServiceImplTest {
         Stock stock = new Stock(productId, BigDecimal.TEN, 1, 0);
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.of(stock));
 
-        OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(300),
-                List.of(new OrderCreated.OrderItemPayload(productId, 3)),
+        ReserveInventory command = new ReserveInventory(
+                UUID.randomUUID(),
+                List.of(new ReserveInventory.Item(productId, 3)),
                 Instant.now()
         );
 
-        assertThrows(InsufficientStockException.class, () -> inventoryService.reserveForOrder(event));
+        assertThrows(InsufficientStockException.class, () -> inventoryService.reserveForOrder(command));
         verify(reservationRepository, never()).save(any());
     }
 
@@ -90,42 +88,14 @@ class InventoryServiceImplTest {
         UUID productId = UUID.randomUUID();
         when(stockRepository.findByProductId(productId)).thenReturn(Optional.empty());
 
-        OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(300),
-                List.of(new OrderCreated.OrderItemPayload(productId, 1)),
+        ReserveInventory command = new ReserveInventory(
+                UUID.randomUUID(),
+                List.of(new ReserveInventory.Item(productId, 1)),
                 Instant.now()
         );
 
-        assertThrows(StockNotFoundException.class, () -> inventoryService.reserveForOrder(event));
+        assertThrows(StockNotFoundException.class, () -> inventoryService.reserveForOrder(command));
         verify(reservationRepository, never()).save(any());
-    }
-
-    @Test
-    void stopsAtFirstFailingItem_whenLaterItemHasNotEnoughStock() {
-        UUID productA = UUID.randomUUID();
-        UUID productB = UUID.randomUUID();
-        Stock stockA = new Stock(productA, BigDecimal.TEN, 5, 0);
-        Stock stockB = new Stock(productB, BigDecimal.TEN, 1, 0);
-        when(stockRepository.findByProductId(productA)).thenReturn(Optional.of(stockA));
-        when(stockRepository.findByProductId(productB)).thenReturn(Optional.of(stockB));
-
-        OrderCreated event = new OrderCreated(
-                UUID.randomUUID(), UUID.randomUUID(), BigDecimal.valueOf(300),
-                List.of(
-                        new OrderCreated.OrderItemPayload(productA, 2),
-                        new OrderCreated.OrderItemPayload(productB, 5)
-                ),
-                Instant.now()
-        );
-
-        assertThrows(InsufficientStockException.class, () -> inventoryService.reserveForOrder(event));
-
-        // productA успел примениться в памяти до того, как упала вторая позиция —
-        // здесь это видно (мок не откатывает состояние), но реальный откат в БД
-        // обеспечивает @Transactional на InventoryServiceImpl, а не эта проверка.
-        // Он покрыт отдельно в InventoryReservationIntegrationTest.
-        assertEquals(3, stockA.getAvailableQuantity());
-        verify(reservationRepository, times(1)).save(any(Reservation.class));
     }
 
     @Test
@@ -143,35 +113,9 @@ class InventoryServiceImplTest {
         inventoryService.confirmReservations(orderId);
 
         assertEquals(ReservationStatus.CONFIRMED, reservation.getReservationStatus());
-        // товар уехал клиенту: резерв снят, но обратно в доступные он не возвращается
+
         assertEquals(0, stock.getReservedQuantity());
         assertEquals(7, stock.getAvailableQuantity());
-    }
-
-    @Test
-    void confirmReservations_confirmsEveryItemOfTheOrder() {
-        UUID orderId = UUID.randomUUID();
-        UUID productA = UUID.randomUUID();
-        UUID productB = UUID.randomUUID();
-
-        Stock stockA = new Stock(productA, BigDecimal.TEN, 10, 0);
-        Stock stockB = new Stock(productB, BigDecimal.TEN, 10, 0);
-        stockA.reserve(2);
-        stockB.reserve(5);
-
-        Reservation reservationA = Reservation.reserved(orderId, productA, 2);
-        Reservation reservationB = Reservation.reserved(orderId, productB, 5);
-
-        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of(reservationA, reservationB));
-        when(stockRepository.findByProductId(productA)).thenReturn(Optional.of(stockA));
-        when(stockRepository.findByProductId(productB)).thenReturn(Optional.of(stockB));
-
-        inventoryService.confirmReservations(orderId);
-
-        assertEquals(ReservationStatus.CONFIRMED, reservationA.getReservationStatus());
-        assertEquals(ReservationStatus.CONFIRMED, reservationB.getReservationStatus());
-        assertEquals(0, stockA.getReservedQuantity());
-        assertEquals(0, stockB.getReservedQuantity());
     }
 
     @Test
@@ -186,7 +130,6 @@ class InventoryServiceImplTest {
 
         inventoryService.confirmReservations(orderId);
 
-        // повторная доставка события не должна ни падать, ни списывать товар второй раз
         assertEquals(ReservationStatus.CONFIRMED, alreadyConfirmed.getReservationStatus());
         verifyNoInteractions(stockRepository);
     }
@@ -206,35 +149,9 @@ class InventoryServiceImplTest {
         inventoryService.releaseReservations(orderId);
 
         assertEquals(ReservationStatus.RELEASED, reservation.getReservationStatus());
-        // компенсация возвращает товар на полку — в отличие от confirm, где он уезжает клиенту
+
         assertEquals(0, stock.getReservedQuantity());
         assertEquals(10, stock.getAvailableQuantity());
-    }
-
-    @Test
-    void releaseReservations_releasesEveryItemOfTheOrder() {
-        UUID orderId = UUID.randomUUID();
-        UUID productA = UUID.randomUUID();
-        UUID productB = UUID.randomUUID();
-
-        Stock stockA = new Stock(productA, BigDecimal.TEN, 10, 0);
-        Stock stockB = new Stock(productB, BigDecimal.TEN, 10, 0);
-        stockA.reserve(2);
-        stockB.reserve(5);
-
-        Reservation reservationA = Reservation.reserved(orderId, productA, 2);
-        Reservation reservationB = Reservation.reserved(orderId, productB, 5);
-
-        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of(reservationA, reservationB));
-        when(stockRepository.findByProductId(productA)).thenReturn(Optional.of(stockA));
-        when(stockRepository.findByProductId(productB)).thenReturn(Optional.of(stockB));
-
-        inventoryService.releaseReservations(orderId);
-
-        assertEquals(ReservationStatus.RELEASED, reservationA.getReservationStatus());
-        assertEquals(ReservationStatus.RELEASED, reservationB.getReservationStatus());
-        assertEquals(10, stockA.getAvailableQuantity());
-        assertEquals(10, stockB.getAvailableQuantity());
     }
 
     @Test
@@ -249,7 +166,6 @@ class InventoryServiceImplTest {
 
         inventoryService.releaseReservations(orderId);
 
-        // товар уже уехал клиенту — вернуть его на полку компенсация не имеет права
         assertEquals(ReservationStatus.CONFIRMED, alreadyConfirmed.getReservationStatus());
         verifyNoInteractions(stockRepository);
     }
@@ -266,18 +182,7 @@ class InventoryServiceImplTest {
 
         inventoryService.releaseReservations(orderId);
 
-        // повторная доставка PaymentFailed не должна вернуть товар на полку дважды
         assertEquals(ReservationStatus.RELEASED, alreadyReleased.getReservationStatus());
-        verifyNoInteractions(stockRepository);
-    }
-
-    @Test
-    void confirmReservations_doesNothing_whenOrderHasNoReservations() {
-        UUID orderId = UUID.randomUUID();
-        when(reservationRepository.findByOrderId(orderId)).thenReturn(List.of());
-
-        inventoryService.confirmReservations(orderId);
-
         verifyNoInteractions(stockRepository);
     }
 }

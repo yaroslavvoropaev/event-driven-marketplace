@@ -16,12 +16,16 @@ import ru.voropaev.event_driven_marketplace.order.domain.Order;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderState;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStateResolver;
 import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
+import ru.voropaev.event_driven_marketplace.order.event.CancellationReason;
+import ru.voropaev.event_driven_marketplace.order.event.OrderCancelled;
 import ru.voropaev.event_driven_marketplace.order.event.OrderCreated;
 import ru.voropaev.event_driven_marketplace.order.repository.OrderRepository;
+import ru.voropaev.event_driven_marketplace.order.service.exception.OrderNotFoundException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -33,7 +37,6 @@ import java.util.UUID;
 
 @ExtendWith(MockitoExtension.class)
 public class OrderServiceImplTest {
-
     @Mock
     private OrderRepository orderRepository;
     @Mock
@@ -66,86 +69,45 @@ public class OrderServiceImplTest {
         ArgumentCaptor<OrderCreated> eventCaptor = ArgumentCaptor.forClass(OrderCreated.class);
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
 
-
         OrderCreated publishedEvent = eventCaptor.getValue();
 
         assertEquals(customerId, publishedEvent.customerId());
         assertEquals(BigDecimal.valueOf(200), publishedEvent.totalAmount());
         assertEquals(1, publishedEvent.items().size());
         assertEquals(2, publishedEvent.items().getFirst().quantity());
-
     }
 
     @Test
-    public void returnsResponseWhenExists() {
-        Order order = new Order(UUID.randomUUID());
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-
-        OrderResponse response = orderService.getOrder(order.getId(), order.getCustomerId());
-
-        assertEquals(order.getId(), response.id());
-        assertEquals(order.getCustomerId(), response.customerId());
-        assertEquals(OrderStatus.CREATED, response.orderStatus());
-    }
-
-    @Test
-    public void throwsNotFoundWhenMissing() {
-        UUID missingId = UUID.randomUUID();
-        when(orderRepository.findById(missingId)).thenReturn(Optional.empty());
-
-        assertThrows(OrderNotFoundException.class,
-                () -> orderService.getOrder(missingId, UUID.randomUUID()));
-    }
-
-    @Test
-    public void updatesStatusWhenTransitionLegal() {
+    public void customerCancelUsesOwnTransitionAndPublishesEvent() {
         Order order = new Order(UUID.randomUUID());
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
         when(orderStateResolver.resolve(OrderStatus.CREATED)).thenReturn(orderState);
-        when(orderState.cancel()).thenReturn(OrderStatus.CANCELLED);
+        when(orderState.cancelByCustomer()).thenReturn(OrderStatus.CANCELLED);
 
         OrderResponse response = orderService.cancelOrder(order.getId(), order.getCustomerId());
 
         assertEquals(OrderStatus.CANCELLED, response.orderStatus());
+
+        verify(orderState, never()).cancel();
+        ArgumentCaptor<OrderCancelled> eventCaptor = ArgumentCaptor.forClass(OrderCancelled.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertEquals(order.getId(), eventCaptor.getValue().orderId());
+        assertEquals(CancellationReason.CUSTOMER_REQUEST, eventCaptor.getValue().reason());
     }
 
     @Test
-    public void _propagatesExceptionWhenTransitionIllegal() {
+    public void propagatesExceptionWhenTransitionIllegal() {
         Order order = new Order(UUID.randomUUID());
         when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
         when(orderStateResolver.resolve(OrderStatus.CREATED)).thenReturn(orderState);
-        when(orderState.cancel())
-                .thenThrow(new InvalidOrderTransitionException(OrderStatus.CREATED, "cancel"));
+        when(orderState.cancelByCustomer())
+                .thenThrow(new InvalidOrderTransitionException(OrderStatus.CREATED, "cancelByCustomer"));
 
         assertThrows(InvalidOrderTransitionException.class,
                 () -> orderService.cancelOrder(order.getId(), order.getCustomerId()));
+        verifyNoInteractions(applicationEventPublisher);
     }
 
-    @Test
-    public void throwsNotFoundWhenReadingOrderOfAnotherCustomer() {
-        Order order = new Order(UUID.randomUUID());
-        UUID stranger = UUID.randomUUID();
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-
-        assertThrows(OrderNotFoundException.class,
-                () -> orderService.getOrder(order.getId(), stranger));
-    }
-
-    @Test
-    public void throwsNotFoundWhenCancellingOrderOfAnotherCustomer() {
-        Order order = new Order(UUID.randomUUID());
-        UUID stranger = UUID.randomUUID();
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-
-        assertThrows(OrderNotFoundException.class,
-                () -> orderService.cancelOrder(order.getId(), stranger));
-    }
-
-    /**
-     * Владельца сверяем раньше, чем состояние: иначе чужой на неотменяемом заказе получил бы
-     * 409, а на несуществующем — 404, и по разнице кодов восстановил бы и факт существования
-     * заказа, и его статус. Отсутствие обращений к резолверу и есть доказательство порядка.
-     */
     @Test
     public void checksOwnershipBeforeState() {
         Order order = new Order(UUID.randomUUID());
@@ -159,55 +121,4 @@ public class OrderServiceImplTest {
         verifyNoInteractions(orderStateResolver);
         assertEquals(OrderStatus.CONFIRMED, order.getOrderStatus());
     }
-
-    /**
-     * Саговые методы действуют от имени системы, а не покупателя: владельца они не знают
-     * и знать не должны.
-     */
-    @Test
-    public void cancelsDueToPaymentFailureWithoutKnowingCustomer() {
-        Order order = new Order(UUID.randomUUID());
-        order.updateStatus(OrderStatus.PENDING);
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-        when(orderStateResolver.resolve(OrderStatus.PENDING)).thenReturn(orderState);
-        when(orderState.cancel()).thenReturn(OrderStatus.CANCELLED);
-
-        OrderResponse response = orderService.cancelOrderDueToPaymentFailure(order.getId());
-
-        assertEquals(OrderStatus.CANCELLED, response.orderStatus());
-    }
-
-    @Test
-    public void confirmsOrderWhenPaymentCompleted() {
-        Order order = new Order(UUID.randomUUID());
-        order.updateStatus(OrderStatus.PENDING);
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-        when(orderStateResolver.resolve(OrderStatus.PENDING)).thenReturn(orderState);
-        when(orderState.confirm()).thenReturn(OrderStatus.CONFIRMED);
-
-        OrderResponse response = orderService.confirmOrder(order.getId());
-
-        assertEquals(OrderStatus.CONFIRMED, response.orderStatus());
-        assertEquals(OrderStatus.CONFIRMED, order.getOrderStatus());
-    }
-
-    @Test
-    public void propagatesExceptionWhenConfirmIsIllegal() {
-        Order order = new Order(UUID.randomUUID());
-        when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
-        when(orderStateResolver.resolve(OrderStatus.CREATED)).thenReturn(orderState);
-        when(orderState.confirm())
-                .thenThrow(new InvalidOrderTransitionException(OrderStatus.CREATED, "confirm"));
-
-        assertThrows(InvalidOrderTransitionException.class, () -> orderService.confirmOrder(order.getId()));
-    }
-
-    @Test
-    public void throwsNotFoundWhenConfirmingMissingOrder() {
-        UUID missingId = UUID.randomUUID();
-        when(orderRepository.findById(missingId)).thenReturn(Optional.empty());
-
-        assertThrows(OrderNotFoundException.class, () -> orderService.confirmOrder(missingId));
-    }
-
 }

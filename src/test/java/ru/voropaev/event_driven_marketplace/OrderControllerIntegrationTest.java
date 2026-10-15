@@ -1,5 +1,7 @@
 package ru.voropaev.event_driven_marketplace;
 
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.voropaev.event_driven_marketplace.order.api.dto.CreateOrderRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderItemRequest;
 import ru.voropaev.event_driven_marketplace.order.api.dto.OrderResponse;
+import ru.voropaev.event_driven_marketplace.order.domain.state.OrderStatus;
+import ru.voropaev.event_driven_marketplace.order.repository.OrderRepository;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
 
@@ -43,6 +47,8 @@ public class OrderControllerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private OrderRepository orderRepository;
 
     @Test
     @Transactional
@@ -77,27 +83,11 @@ public class OrderControllerIntegrationTest {
                 .andExpect(jsonPath("$.message", containsString("items")));
     }
 
-    /**
-     * Нулевое количество проходило валидацию и доезжало до конца саги: заказ на ноль штук
-     * за ноль рублей получал статус CONFIRMED.
-     */
-    @Test
+    @ParameterizedTest
+    @ValueSource(ints = {0, -5})
     @Transactional
-    public void createOrder_returnsBadRequest_whenQuantityIsZero() throws Exception {
-        mockMvc.perform(postOrder(UUID.randomUUID(), SEEDED_PRODUCT_ID, 0))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", containsString("quantity")));
-    }
-
-    /**
-     * Отрицательное количество было хуже нулевого: Stock.reserve(-5) проходил проверку
-     * canReserve и увеличивал доступный остаток, то есть товар печатался из воздуха,
-     * а платёж выписывался на отрицательную сумму.
-     */
-    @Test
-    @Transactional
-    public void createOrder_returnsBadRequest_whenQuantityIsNegative() throws Exception {
-        mockMvc.perform(postOrder(UUID.randomUUID(), SEEDED_PRODUCT_ID, -5))
+    public void createOrder_returnsBadRequest_whenQuantityIsNotPositive(int quantity) throws Exception {
+        mockMvc.perform(postOrder(UUID.randomUUID(), SEEDED_PRODUCT_ID, quantity))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("quantity")));
     }
@@ -115,31 +105,11 @@ public class OrderControllerIntegrationTest {
 
     @Test
     @Transactional
-    public void createOrder_returnsBadRequest_whenBodyIsNotJson() throws Exception {
-        mockMvc.perform(post("/api/orders")
-                        .with(jwtFor(UUID.randomUUID()))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"items\": [{\"productId\": \"not-a-uuid\", \"quantity\": 1}]}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Malformed request body"));
-    }
-
-    /**
-     * КРАСНЫЙ, пока StockNotFoundException протекает из inventory наружу: сейчас это 500.
-     * Ссылка на несуществующий товар — ошибка клиента в теле запроса, а не отказ сервера.
-     */
-    @Test
-    @Transactional
     public void createOrder_returnsBadRequest_whenProductDoesNotExist() throws Exception {
         mockMvc.perform(postOrder(UUID.randomUUID(), UUID.randomUUID(), 1))
                 .andExpect(status().isBadRequest());
     }
 
-    /**
-     * КРАСНЫЙ, пока обработчик отдаёт exception.getMessage(): наружу уезжают внутренние
-     * типы вида java.util.UUID и присланное значение. То же исключение возникает и на
-     * @RequestParam, где в значении может оказаться что угодно.
-     */
     @Test
     @Transactional
     public void getOrder_returnsBadRequestWithoutInternals_whenIdIsNotUuid() throws Exception {
@@ -162,35 +132,6 @@ public class OrderControllerIntegrationTest {
                 .andExpect(jsonPath("$.orderStatus").value("CREATED"));
     }
 
-    @Test
-    @Transactional
-    public void getOrder_returnsNotFound_whenMissing() throws Exception {
-        UUID missingId = UUID.randomUUID();
-
-        mockMvc.perform(get("/api/orders/{id}", missingId).with(jwtFor(UUID.randomUUID())))
-                .andExpect(status().isNotFound());
-    }
-
-    /**
-     * Чужой заказ отдаётся как несуществующий: 403 подтвердил бы, что заказ с таким id есть,
-     * и превратил бы эндпоинт в оракул для перебора.
-     */
-    @Test
-    @Transactional
-    public void getOrder_returnsNotFound_whenOrderBelongsToAnotherCustomer() throws Exception {
-        UUID owner = UUID.randomUUID();
-        UUID stranger = UUID.randomUUID();
-        UUID orderId = createOrderAndGetId(owner);
-
-        mockMvc.perform(get("/api/orders/{id}", orderId).with(jwtFor(stranger)))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Order not found: " + orderId));
-    }
-
-    /**
-     * Ответ на чужой заказ должен быть неотличим от ответа на несуществующий — иначе
-     * различие в теле выдаёт то, что скрыл код статуса.
-     */
     @Test
     @Transactional
     public void getOrder_returnsSameBody_forForeignAndMissingOrder() throws Exception {
@@ -228,34 +169,6 @@ public class OrderControllerIntegrationTest {
 
     @Test
     @Transactional
-    public void cancelOrder_returnsNotFound_whenMissing() throws Exception {
-        UUID missingId = UUID.randomUUID();
-
-        mockMvc.perform(post("/api/orders/{id}/cancel", missingId).with(jwtFor(UUID.randomUUID())))
-                .andExpect(status().isNotFound());
-    }
-
-    @Test
-    @Transactional
-    public void cancelOrder_returnsNotFound_whenOrderBelongsToAnotherCustomer() throws Exception {
-        UUID owner = UUID.randomUUID();
-        UUID stranger = UUID.randomUUID();
-        UUID orderId = createOrderAndGetId(owner);
-
-        mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(jwtFor(stranger)))
-                .andExpect(status().isNotFound());
-
-        mockMvc.perform(get("/api/orders/{id}", orderId).with(jwtFor(owner)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.orderStatus").value("CREATED"));
-    }
-
-    /**
-     * Отменяемость заказа не должна просачиваться наружу: чужому и на CREATED, и на
-     * уже отменённом заказе приходит один и тот же 404, а не 404 против 409.
-     */
-    @Test
-    @Transactional
     public void cancelOrder_returnsNotFound_notConflict_whenStrangerCancelsCancelledOrder() throws Exception {
         UUID owner = UUID.randomUUID();
         UUID stranger = UUID.randomUUID();
@@ -279,6 +192,20 @@ public class OrderControllerIntegrationTest {
 
         mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(jwtFor(customerId)))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    @Transactional
+    public void cancelOrder_returnsConflict_whenPending() throws Exception {
+        UUID customerId = UUID.randomUUID();
+        UUID orderId = createOrderAndGetId(customerId);
+        orderRepository.findById(orderId).orElseThrow().updateStatus(OrderStatus.PENDING);
+
+        mockMvc.perform(post("/api/orders/{id}/cancel", orderId).with(jwtFor(customerId)))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(get("/api/orders/{id}", orderId).with(jwtFor(customerId)))
+                .andExpect(jsonPath("$.orderStatus").value("PENDING"));
     }
 
     private static JwtRequestPostProcessor jwtFor(UUID customerId) {

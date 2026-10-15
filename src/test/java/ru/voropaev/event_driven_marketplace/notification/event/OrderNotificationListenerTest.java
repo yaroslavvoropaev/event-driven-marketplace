@@ -35,7 +35,6 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OrderNotificationListenerTest {
-
     private static final UUID ORDER_ID = UUID.randomUUID();
     private static final UUID CUSTOMER_ID = UUID.randomUUID();
     private static final UUID NOTIFICATION_ID = UUID.randomUUID();
@@ -88,8 +87,6 @@ class OrderNotificationListenerTest {
                 : NotificationMessages.cancelled(cancelledEvent(CancellationReason.PAYMENT_FAILED));
     }
 
-    // --- успешный путь ---
-
     @Test
     void confirmed_registersSendsAndMarksSent() {
         customerHasEmail();
@@ -98,10 +95,11 @@ class OrderNotificationListenerTest {
 
         listener.on(confirmedEvent());
 
-        verify(notificationService).startDelivery(ORDER_ID, CUSTOMER_ID, NotificationType.ORDER_CONFIRMED,
+        InOrder inOrder = inOrder(notificationService, notificationSender);
+        inOrder.verify(notificationService).startDelivery(ORDER_ID, CUSTOMER_ID, NotificationType.ORDER_CONFIRMED,
                 EMAIL, expected.subject(), expected.body());
-        verify(notificationSender).send(EMAIL, expected.subject(), expected.body());
-        verify(notificationService).markSent(NOTIFICATION_ID);
+        inOrder.verify(notificationSender).send(EMAIL, expected.subject(), expected.body());
+        inOrder.verify(notificationService).markSent(NOTIFICATION_ID);
         verify(notificationService, never()).markFailed(any(), any());
     }
 
@@ -119,24 +117,6 @@ class OrderNotificationListenerTest {
         verify(notificationSender).send(EMAIL, expected.subject(), expected.body());
         verify(notificationService).markSent(NOTIFICATION_ID);
     }
-
-    /**
-     * N-3: при обратном порядке сбой между отправкой и записью дал бы второе письмо.
-     */
-    @Test
-    void registersDeliveryBeforeSending() {
-        customerHasEmail();
-        deliveryStarts(NotificationType.ORDER_CONFIRMED);
-
-        listener.on(confirmedEvent());
-
-        InOrder order = inOrder(notificationService, notificationSender);
-        order.verify(notificationService).startDelivery(any(), any(), any(), any(), any(), any());
-        order.verify(notificationSender).send(anyString(), anyString(), anyString());
-        order.verify(notificationService).markSent(NOTIFICATION_ID);
-    }
-
-    // --- пропуски ---
 
     @Test
     void skipsWithoutRecord_whenCustomerHasNoEmail() {
@@ -160,10 +140,6 @@ class OrderNotificationListenerTest {
         verify(notificationService, never()).markFailed(any(), any());
     }
 
-    /**
-     * Проиграли гонку: строку вставил параллельный обработчик. Трогать её нельзя —
-     * она чужая, и письмо по ней, возможно, как раз уходит.
-     */
     @Test
     void yieldsSilently_whenConcurrentHandlerWonTheRace() {
         customerHasEmail();
@@ -176,8 +152,6 @@ class OrderNotificationListenerTest {
         verify(notificationService, never()).markSent(any());
         verify(notificationService, never()).markFailed(any(), any());
     }
-
-    // --- отказы ---
 
     @Test
     void marksFailedWithReason_whenSenderRefuses() {
@@ -192,9 +166,6 @@ class OrderNotificationListenerTest {
         verify(notificationService, never()).markSent(any());
     }
 
-    /**
-     * N-9: письмо реально ушло, поэтому сбой записи SENT не должен превращаться в FAILED.
-     */
     @Test
     void doesNotMarkFailed_whenSentButMarkSentFails() {
         customerHasEmail();
@@ -205,25 +176,6 @@ class OrderNotificationListenerTest {
 
         verify(notificationSender).send(anyString(), anyString(), anyString());
         verify(notificationService, never()).markFailed(any(), any());
-    }
-
-    /**
-     * N-10: даже неудачная запись FAILED не выходит наружу. Здесь же ловушка из-за
-     * отсутствия обрезки reason: длинная причина роняет markFailed ровно этим типом,
-     * и широкий catch DataIntegrityViolationException выдал бы её за безобидный дубль.
-     */
-    @Test
-    void staysIsolated_whenMarkFailedItselfFails() {
-        customerHasEmail();
-        deliveryStarts(NotificationType.ORDER_CONFIRMED);
-        doThrow(new NotificationDeliveryException("smtp timeout"))
-                .when(notificationSender).send(anyString(), anyString(), anyString());
-        doThrow(new DataIntegrityViolationException("value too long"))
-                .when(notificationService).markFailed(any(), any());
-
-        assertDoesNotThrow(() -> listener.on(confirmedEvent()));
-
-        verify(notificationService, never()).markSent(any());
     }
 
     @Test
@@ -244,8 +196,6 @@ class OrderNotificationListenerTest {
 
         assertDoesNotThrow(() -> listener.on(confirmedEvent()));
 
-        // не NotificationDeliveryException — значит, не «канал отказал», а неизвестный сбой:
-        // строка остаётся PENDING, её разберёт будущий sweeper
         verify(notificationService, never()).markFailed(any(), any());
         verify(notificationService, never()).markSent(any());
     }

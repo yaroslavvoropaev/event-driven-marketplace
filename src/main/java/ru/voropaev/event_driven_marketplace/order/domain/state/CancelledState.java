@@ -24,4 +24,9 @@ public class CancelledState implements OrderState {
     public OrderStatus startProcessing() {
         throw new InvalidOrderTransitionException(OrderStatus.CANCELLED, "startProcessing");
     }
+
+    @Override
+    public OrderStatus cancelByCustomer() {
+        throw new InvalidOrderTransitionException(OrderStatus.CANCELLED, "cancelByCustomer");
+    }
 }

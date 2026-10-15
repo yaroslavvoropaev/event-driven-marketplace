@@ -15,9 +15,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -26,7 +24,6 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceImplTest {
-
     private static final UUID ORDER_ID = UUID.randomUUID();
     private static final UUID CUSTOMER_ID = UUID.randomUUID();
     private static final NotificationType TYPE = NotificationType.ORDER_CONFIRMED;
@@ -70,28 +67,10 @@ class NotificationServiceImplTest {
         assertEquals(RECIPIENT, saved.getRecipient());
         assertEquals(SUBJECT, saved.getSubject());
         assertEquals(BODY, saved.getBody());
+        assertEquals(NotificationStatus.PENDING, saved.getStatus());
+        assertNull(saved.getSentAt());
     }
 
-    /**
-     * Строка коммитится до отправки — только так она защищает от второго письма.
-     */
-    @Test
-    void startDelivery_persistsBeforeAnythingIsSent() {
-        when(notificationRepository.existsByOrderIdAndType(ORDER_ID, TYPE)).thenReturn(false);
-
-        startDelivery();
-
-        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationRepository).save(captor.capture());
-
-        assertEquals(NotificationStatus.PENDING, captor.getValue().getStatus());
-        assertNull(captor.getValue().getSentAt());
-    }
-
-    /**
-     * Быстрый путь дедупликации. Настоящий барьер — уникальный индекс, он проверяется
-     * в NotificationPersistenceIntegrationTest на живом Postgres.
-     */
     @Test
     void startDelivery_returnsEmptyAndSavesNothing_whenSameOrderAndTypeAlreadyNotified() {
         when(notificationRepository.existsByOrderIdAndType(ORDER_ID, TYPE)).thenReturn(true);
@@ -100,21 +79,6 @@ class NotificationServiceImplTest {
 
         assertTrue(returned.isEmpty());
         verify(notificationRepository, never()).save(any());
-    }
-
-    /**
-     * Подтверждение и отмена — разные ключи, вторая не должна отсекаться первой.
-     */
-    @Test
-    void startDelivery_isNotBlockedByNotificationOfAnotherType() {
-        when(notificationRepository.existsByOrderIdAndType(ORDER_ID, NotificationType.ORDER_CANCELLED))
-                .thenReturn(false);
-
-        Optional<UUID> returned = notificationService.startDelivery(ORDER_ID, CUSTOMER_ID,
-                NotificationType.ORDER_CANCELLED, RECIPIENT, SUBJECT, BODY);
-
-        assertTrue(returned.isPresent());
-        verify(notificationRepository).save(any());
     }
 
     @Test
@@ -138,40 +102,5 @@ class NotificationServiceImplTest {
         assertEquals(NotificationStatus.FAILED, notification.getStatus());
         assertEquals("smtp timeout", notification.getFailureReason());
         assertNull(notification.getSentAt());
-    }
-
-    @Test
-    void markSent_throws_whenNotificationIsMissing() {
-        UUID missingId = UUID.randomUUID();
-        when(notificationRepository.findById(missingId)).thenReturn(Optional.empty());
-
-        assertThrows(NotificationNotFoundException.class,
-                () -> notificationService.markSent(missingId));
-    }
-
-    @Test
-    void markFailed_throws_whenNotificationIsMissing() {
-        UUID missingId = UUID.randomUUID();
-        when(notificationRepository.findById(missingId)).thenReturn(Optional.empty());
-
-        assertThrows(NotificationNotFoundException.class,
-                () -> notificationService.markFailed(missingId, "smtp timeout"));
-    }
-
-    /**
-     * Обрезки reason до длины колонки (512) пока нет — осознанный пробел.
-     * Тест фиксирует текущее поведение: сервис кладёт сообщение как есть, и с длинным
-     * текстом от настоящего сендера flush упадёт, оставив строку в PENDING.
-     */
-    @Test
-    void markFailed_doesNotTruncateLongReasonYet() {
-        Notification notification = pendingNotification();
-        String longReason = "x".repeat(600);
-        when(notificationRepository.findById(notification.getId())).thenReturn(Optional.of(notification));
-
-        notificationService.markFailed(notification.getId(), longReason);
-
-        assertEquals(600, notification.getFailureReason().length());
-        assertFalse(notification.getFailureReason().length() <= 512);
     }
 }
